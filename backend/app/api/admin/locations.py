@@ -8,12 +8,16 @@ from app.services.minio_service import effective_photo_url
 from app.schemas.admin import (
     BuildingCreate,
     BuildingOut,
+    BuildingUpdate,
     CampusCreate,
     CampusOut,
+    CampusUpdate,
     FloorCreate,
     FloorOut,
+    FloorUpdate,
     StructureCreate,
     StructureOut,
+    StructureUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin-locations"])
@@ -43,6 +47,25 @@ def create_campus(payload: CampusCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Campus already exists") from e
     db.refresh(campus)
     return campus
+
+
+@router.patch("/campuses/{campus_id}", response_model=CampusOut)
+def update_campus(campus_id: int, payload: CampusUpdate, db: Session = Depends(get_db)):
+    campus = db.query(Campus).filter(Campus.id == campus_id).one_or_none()
+    if not campus:
+        raise HTTPException(status_code=404, detail="Campus not found")
+    campus.name = payload.name.strip()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Campus already exists") from e
+    db.refresh(campus)
+    return CampusOut(
+        id=campus.id,
+        name=campus.name,
+        photo_url=effective_photo_url(campus.photo_url, campus.minio_object_key),
+    )
 
 
 @router.delete("/campuses/{campus_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -94,6 +117,26 @@ def create_building(payload: BuildingCreate, db: Session = Depends(get_db)):
     return building
 
 
+@router.patch("/buildings/{building_id}", response_model=BuildingOut)
+def update_building(building_id: int, payload: BuildingUpdate, db: Session = Depends(get_db)):
+    building = db.query(Building).filter(Building.id == building_id).one_or_none()
+    if not building:
+        raise HTTPException(status_code=404, detail="Building not found")
+    building.name = payload.name.strip()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Building conflict") from e
+    db.refresh(building)
+    return BuildingOut(
+        id=building.id,
+        campus_id=building.campus_id,
+        name=building.name,
+        photo_url=effective_photo_url(building.photo_url, building.minio_object_key),
+    )
+
+
 @router.delete("/buildings/{building_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_building(building_id: int, db: Session = Depends(get_db)):
     building = db.query(Building).filter(Building.id == building_id).one_or_none()
@@ -138,6 +181,26 @@ def create_structure(payload: StructureCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Structure conflict") from e
     db.refresh(structure)
     return structure
+
+
+@router.patch("/structures/{structure_id}", response_model=StructureOut)
+def update_structure(structure_id: int, payload: StructureUpdate, db: Session = Depends(get_db)):
+    structure = db.query(Structure).filter(Structure.id == structure_id).one_or_none()
+    if not structure:
+        raise HTTPException(status_code=404, detail="Structure not found")
+    structure.name = payload.name.strip()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Structure conflict") from e
+    db.refresh(structure)
+    return StructureOut(
+        id=structure.id,
+        building_id=structure.building_id,
+        name=structure.name,
+        photo_url=effective_photo_url(structure.photo_url, structure.minio_object_key),
+    )
 
 
 @router.delete("/structures/{structure_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -207,6 +270,33 @@ def create_floor(payload: FloorCreate, db: Session = Depends(get_db)):
         sort_order=floor.sort_order,
         plan_id=plan.id,
         plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key),
+    )
+
+
+@router.patch("/floors/{floor_id}", response_model=FloorOut)
+def update_floor(floor_id: int, payload: FloorUpdate, db: Session = Depends(get_db)):
+    floor = db.query(Floor).filter(Floor.id == floor_id).one_or_none()
+    if not floor:
+        raise HTTPException(status_code=404, detail="Floor not found")
+    name = payload.name.strip()
+    floor.name = name
+    plan = db.query(Plan).filter(Plan.floor_id == floor_id).one_or_none()
+    if plan:
+        plan.title = name
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Floor conflict") from e
+    db.refresh(floor)
+    plan = db.query(Plan).filter(Plan.floor_id == floor.id).one_or_none()
+    return FloorOut(
+        id=floor.id,
+        structure_id=floor.structure_id,
+        name=floor.name,
+        sort_order=floor.sort_order,
+        plan_id=plan.id if plan else None,
+        plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key) if plan else None,
     )
 
 

@@ -51,6 +51,30 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  updateCampus: (id, payload) =>
+    request(`/admin/campuses/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateBuilding: (id, payload) =>
+    request(`/admin/buildings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateStructure: (id, payload) =>
+    request(`/admin/structures/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateFloor: (id, payload) =>
+    request(`/admin/floors/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   getBuildings: (campusId) => request(`/admin/buildings?campus_id=${campusId}`),
   getStructures: (buildingId) => request(`/admin/structures?building_id=${buildingId}`),
   getFloors: (structureId) => request(`/admin/floors?structure_id=${structureId}`),

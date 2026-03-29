@@ -27,6 +27,30 @@ body {
   padding: 16px;
 }
 
+.content-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.content-titles {
+  flex: 1 1 auto;
+  min-width: min(100%, 220px);
+}
+
+.content-titles h1 {
+  margin: 0 0 6px 0;
+  font-size: 1.5rem;
+}
+
+.content-titles .muted,
+.content-titles .error {
+  margin: 4px 0 0 0;
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -160,4 +184,98 @@ td {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: center;
+}
+
+.rename-card {
+  flex: 0 1 auto;
+  max-width: min(50%, 420px);
+  width: 100%;
+  margin-bottom: 0;
+  align-self: flex-start;
+}
+
+.rename-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.rename-form input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-overlay[hidden] {
+  display: none !important;
+}
+
+.modal-dialog {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+.modal-dialog h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.15rem;
+}
+
+.modal-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.modal-form label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.modal-form select,
+.modal-form input {
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.btn-secondary {
+  background: #fff;
+  border: 1px solid #ccc;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #f3f3f3;
 }

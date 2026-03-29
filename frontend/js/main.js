@@ -54,12 +54,46 @@ function clearPlanView() {
   state.selected.planId = null;
 }
 
+let editingObjectId = null;
+
 const CREATE_LABELS = {
   none: { title: "Создать новый кампус", placeholder: "Введите название кампуса" },
   campus: { title: "Создать новый корпус", placeholder: "Введите название корпуса" },
   building: { title: "Создать новое строение", placeholder: "Введите название строения" },
   structure: { title: "Создать новый этаж", placeholder: "Введите название этажа" },
 };
+
+const RENAME_TITLES = {
+  campus: "Название кампуса",
+  building: "Название корпуса",
+  structure: "Название строения",
+  floor: "Название этажа",
+};
+
+function getRenameLevel() {
+  if (state.selected.floorId) return "floor";
+  if (state.selected.structureId) return "structure";
+  if (state.selected.buildingId) return "building";
+  return "campus";
+}
+
+function nameForRenameLevel(level) {
+  if (level === "floor") return getSelectedName(state.floors, state.selected.floorId);
+  if (level === "structure") return getSelectedName(state.structures, state.selected.structureId);
+  if (level === "building") return getSelectedName(state.buildings, state.selected.buildingId);
+  return getSelectedName(state.campuses, state.selected.campusId);
+}
+
+function syncRenameField() {
+  if (!state.selected.campusId) {
+    dom.renameCard.hidden = true;
+    return;
+  }
+  dom.renameCard.hidden = false;
+  const level = getRenameLevel();
+  dom.renameCardHeading.textContent = RENAME_TITLES[level];
+  dom.renameEntityInput.value = nameForRenameLevel(level);
+}
 
 function applyCreateFormsVisibility(mode) {
   const showForm = (formEl, on) => {
@@ -92,6 +126,7 @@ function setMode(mode) {
     dom.emptyStateText.textContent =
       "Создайте кампус или выберите существующий в дереве.";
     applyCreateFormsVisibility("none");
+    syncRenameField();
     return;
   }
   dom.photoCard.style.display = "block";
@@ -103,6 +138,7 @@ function setMode(mode) {
     dom.objectForm.style.display = "grid";
     dom.emptyStateText.style.display = "none";
     applyCreateFormsVisibility("floor");
+    syncRenameField();
     return;
   }
   dom.photoCardTitle.textContent = "Фото";
@@ -112,6 +148,7 @@ function setMode(mode) {
   dom.objectsTbody.innerHTML = "";
   dom.emptyStateText.style.display = "none";
   applyCreateFormsVisibility(mode);
+  syncRenameField();
 }
 
 function pickEntityPhotoUrl(modelName, id) {
@@ -162,15 +199,7 @@ function renderObjects() {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.textContent = "Редактировать";
-    editBtn.onclick = async () => {
-      const nextName = prompt("Новое название:", obj.name);
-      if (!nextName) return;
-      await api.updateObject(obj.id, {
-        object_type_id: obj.object_type.id,
-        name: nextName.trim(),
-      });
-      await loadFloorContext(state.selected.floorId);
-    };
+    editBtn.onclick = () => openEditObjectModal(obj);
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -186,6 +215,26 @@ function renderObjects() {
     tr.append(typeCell, nameCell, actionCell);
     dom.objectsTbody.appendChild(tr);
   }
+}
+
+function openEditObjectModal(obj) {
+  editingObjectId = obj.id;
+  dom.editObjectName.value = obj.name;
+  dom.editObjectType.innerHTML = "";
+  for (const t of state.objectTypes) {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = t.name;
+    if (t.id === obj.object_type.id) opt.selected = true;
+    dom.editObjectType.appendChild(opt);
+  }
+  dom.modalOverlay.hidden = false;
+  dom.editObjectName.focus();
+}
+
+function closeEditObjectModal() {
+  dom.modalOverlay.hidden = true;
+  editingObjectId = null;
 }
 
 async function loadFloorContext(floorId) {
@@ -365,6 +414,70 @@ dom.createFloorForm.addEventListener("submit", (e) =>
     await onFloorChange();
   }),
 );
+
+dom.renameEntityForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    const name = dom.renameEntityInput.value.trim();
+    if (!name) return;
+    const level = getRenameLevel();
+    if (level === "campus") {
+      const id = state.selected.campusId;
+      await api.updateCampus(id, { name });
+      state.campuses = await api.getCampuses();
+      fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+      dom.campusSelect.value = String(id);
+      dom.pageTitle.textContent = getSelectedName(state.campuses, id);
+    } else if (level === "building") {
+      const bid = state.selected.buildingId;
+      await api.updateBuilding(bid, { name });
+      state.buildings = await api.getBuildings(state.selected.campusId);
+      fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+      dom.buildingSelect.value = String(bid);
+      dom.pageTitle.textContent = getSelectedName(state.buildings, bid);
+    } else if (level === "structure") {
+      const sid = state.selected.structureId;
+      await api.updateStructure(sid, { name });
+      state.structures = await api.getStructures(state.selected.buildingId);
+      fillSelect(dom.structureSelect, state.structures, "Введите строение");
+      dom.structureSelect.value = String(sid);
+      dom.pageTitle.textContent = getSelectedName(state.structures, sid);
+    } else {
+      const fid = state.selected.floorId;
+      await api.updateFloor(fid, { name });
+      state.floors = await api.getFloors(state.selected.structureId);
+      fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+      dom.floorSelect.value = String(fid);
+      dom.pageTitle.textContent = getSelectedName(state.floors, fid);
+      await loadFloorContext(fid);
+    }
+    renderPath();
+    syncRenameField();
+  }),
+);
+
+dom.editObjectForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    if (editingObjectId == null) return;
+    const object_type_id = Number(dom.editObjectType.value);
+    const name = dom.editObjectName.value.trim();
+    if (!object_type_id || !name) return;
+    await api.updateObject(editingObjectId, { object_type_id, name });
+    closeEditObjectModal();
+    await loadFloorContext(state.selected.floorId);
+  }),
+);
+
+dom.cancelEditObjectBtn.addEventListener("click", () => closeEditObjectModal());
+
+dom.modalOverlay.addEventListener("click", (e) => {
+  if (e.target === dom.modalOverlay) closeEditObjectModal();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !dom.modalOverlay.hidden) closeEditObjectModal();
+});
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));
 dom.buildingSelect.addEventListener("change", () => run(onBuildingChange));

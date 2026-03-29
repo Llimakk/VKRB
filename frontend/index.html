@@ -37,10 +37,21 @@
       </aside>
 
       <section class="content">
-        <h1 id="pageTitle">Админка</h1>
-        <p id="pathText" class="muted">Выберите кампус.</p>
-        <p id="errorText" class="error"></p>
-        <p id="emptyStateText" class="muted">Создайте кампус или выберите существующий в дереве.</p>
+        <div class="content-header">
+          <div class="content-titles">
+            <h1 id="pageTitle">Админка</h1>
+            <p id="pathText" class="muted">Выберите кампус.</p>
+            <p id="errorText" class="error"></p>
+            <p id="emptyStateText" class="muted">Создайте кампус или выберите существующий в дереве.</p>
+          </div>
+          <section id="renameCard" class="card rename-card" hidden>
+            <h4 id="renameCardHeading">Название кампуса</h4>
+            <form id="renameEntityForm" class="rename-form">
+              <input id="renameEntityInput" type="text" autocomplete="off" required />
+              <button type="submit">Сохранить</button>
+            </form>
+          </section>
+        </div>
 
         <div class="content-grid">
           <section id="photoCard" class="card photo-card">
@@ -105,6 +116,26 @@
         </div>
       </section>
     </main>
+
+    <div id="modalOverlay" class="modal-overlay" hidden>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="editObjectModalTitle">
+        <h3 id="editObjectModalTitle">Редактировать объект</h3>
+        <form id="editObjectForm" class="modal-form">
+          <div>
+            <label for="editObjectType">Тип</label>
+            <select id="editObjectType" required></select>
+          </div>
+          <div>
+            <label for="editObjectName">Название</label>
+            <input id="editObjectName" type="text" autocomplete="off" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="cancelEditObjectBtn" class="btn-secondary">Отмена</button>
+            <button type="submit">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script type="module" src="./js/main.js"></script>
   </body>
