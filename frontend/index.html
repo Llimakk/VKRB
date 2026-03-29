@@ -40,21 +40,49 @@
         <h1 id="pageTitle">Админка</h1>
         <p id="pathText" class="muted">Выберите кампус.</p>
         <p id="errorText" class="error"></p>
-        <p id="emptyStateText" class="muted">Введите кампус.</p>
+        <p id="emptyStateText" class="muted">Создайте кампус или выберите существующий в дереве.</p>
 
         <div class="content-grid">
-          <section id="leftCard" class="card">
-            <h3 id="leftCardTitle">Фото</h3>
-            <img id="planImage" alt="План этажа" />
-            <p id="planHint" class="muted">Изображение не загружено.</p>
-            <form id="imageForm">
-              <input id="imageInput" type="file" accept="image/*" />
-              <button type="submit">Загрузить / заменить JPG</button>
-            </form>
-            <button id="deleteImageBtn" type="button">Удалить JPG</button>
+          <section id="photoCard" class="card photo-card">
+            <h3 id="photoCardTitle">Фото</h3>
+            <div id="photoBlock">
+              <img id="planImage" alt="План этажа" />
+              <p id="planHint" class="muted">Изображение не загружено.</p>
+              <div class="photo-toolbar">
+                <form id="imageForm" class="photo-upload-form">
+                  <input id="imageInput" type="file" accept="image/*" />
+                  <button type="submit">Загрузить / заменить JPG</button>
+                </form>
+                <button id="deleteImageBtn" type="button">Удалить JPG</button>
+              </div>
+            </div>
           </section>
 
-          <section id="rightCard" class="card">
+          <section id="createEntityCard" class="card create-entity-card">
+            <h3 id="createEntityTitle">Создать новый кампус</h3>
+            <div id="createCampusBlock">
+              <form id="createCampusForm" class="create-form">
+                <input id="createCampusName" type="text" autocomplete="off" required />
+                <button type="submit">Создать</button>
+              </form>
+            </div>
+            <div id="createChildBlock">
+              <form id="createBuildingForm" class="create-form" style="display: none">
+                <input id="createBuildingName" type="text" autocomplete="off" required />
+                <button type="submit">Создать</button>
+              </form>
+              <form id="createStructureForm" class="create-form" style="display: none">
+                <input id="createStructureName" type="text" autocomplete="off" required />
+                <button type="submit">Создать</button>
+              </form>
+              <form id="createFloorForm" class="create-form" style="display: none">
+                <input id="createFloorName" type="text" autocomplete="off" required />
+                <button type="submit">Создать</button>
+              </form>
+            </div>
+          </section>
+
+          <section id="rightCard" class="card objects-card">
             <h3 id="rightCardTitle">Данные</h3>
 
             <form id="objectForm" class="object-form">
@@ -81,4 +109,3 @@
     <script type="module" src="./js/main.js"></script>
   </body>
 </html>
-

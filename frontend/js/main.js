@@ -54,29 +54,64 @@ function clearPlanView() {
   state.selected.planId = null;
 }
 
+const CREATE_LABELS = {
+  none: { title: "Создать новый кампус", placeholder: "Введите название кампуса" },
+  campus: { title: "Создать новый корпус", placeholder: "Введите название корпуса" },
+  building: { title: "Создать новое строение", placeholder: "Введите название строения" },
+  structure: { title: "Создать новый этаж", placeholder: "Введите название этажа" },
+};
+
+function applyCreateFormsVisibility(mode) {
+  const showForm = (formEl, on) => {
+    formEl.style.display = on ? "grid" : "none";
+  };
+  dom.createCampusBlock.style.display = mode === "none" ? "block" : "none";
+  dom.photoBlock.style.display = mode === "none" ? "none" : "block";
+  showForm(dom.createBuildingForm, mode === "campus");
+  showForm(dom.createStructureForm, mode === "building");
+  showForm(dom.createFloorForm, mode === "structure");
+  const showChildBlock = mode === "campus" || mode === "building" || mode === "structure";
+  dom.createChildBlock.style.display = showChildBlock ? "block" : "none";
+
+  if (mode !== "floor") {
+    const lab = CREATE_LABELS[mode];
+    dom.createEntityTitle.textContent = lab.title;
+    dom.createCampusName.placeholder = mode === "none" ? lab.placeholder : "";
+    dom.createBuildingName.placeholder = mode === "campus" ? lab.placeholder : "";
+    dom.createStructureName.placeholder = mode === "building" ? lab.placeholder : "";
+    dom.createFloorName.placeholder = mode === "structure" ? lab.placeholder : "";
+  }
+}
+
 function setMode(mode) {
   if (mode === "none") {
-    dom.leftCard.style.display = "none";
+    dom.photoCard.style.display = "none";
+    dom.createEntityCard.style.display = "block";
     dom.rightCard.style.display = "none";
     dom.emptyStateText.style.display = "block";
-    dom.emptyStateText.textContent = "Введите кампус.";
+    dom.emptyStateText.textContent =
+      "Создайте кампус или выберите существующий в дереве.";
+    applyCreateFormsVisibility("none");
     return;
   }
-  dom.leftCard.style.display = "block";
+  dom.photoCard.style.display = "block";
+  dom.createEntityCard.style.display = mode === "floor" ? "none" : "block";
   if (mode === "floor") {
-    dom.leftCardTitle.textContent = "План";
+    dom.photoCardTitle.textContent = "План";
     dom.rightCardTitle.textContent = "Объекты";
     dom.rightCard.style.display = "block";
     dom.objectForm.style.display = "grid";
     dom.emptyStateText.style.display = "none";
+    applyCreateFormsVisibility("floor");
     return;
   }
-  dom.leftCardTitle.textContent = "Фото";
+  dom.photoCardTitle.textContent = "Фото";
   dom.rightCardTitle.textContent = "";
   dom.rightCard.style.display = "none";
   dom.objectForm.style.display = "none";
   dom.objectsTbody.innerHTML = "";
   dom.emptyStateText.style.display = "none";
+  applyCreateFormsVisibility(mode);
 }
 
 function pickEntityPhotoUrl(modelName, id) {
@@ -256,6 +291,80 @@ async function initObjectTypes() {
   state.objectTypes = await api.getObjectTypes();
   fillSelect(dom.typeSelect, state.objectTypes, "Тип объекта");
 }
+
+function nextFloorSortOrder() {
+  if (!state.floors.length) return 0;
+  return Math.max(...state.floors.map((f) => f.sort_order)) + 1;
+}
+
+dom.createCampusForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    const name = dom.createCampusName.value.trim();
+    if (!name) return;
+    const created = await api.createCampus({ name });
+    dom.createCampusName.value = "";
+    state.campuses = await api.getCampuses();
+    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+    dom.campusSelect.value = String(created.id);
+    await onCampusChange();
+  }),
+);
+
+dom.createBuildingForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    if (!state.selected.campusId) return;
+    const name = dom.createBuildingName.value.trim();
+    if (!name) return;
+    const created = await api.createBuilding({
+      campus_id: state.selected.campusId,
+      name,
+    });
+    dom.createBuildingName.value = "";
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    dom.buildingSelect.value = String(created.id);
+    await onBuildingChange();
+  }),
+);
+
+dom.createStructureForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    if (!state.selected.buildingId) return;
+    const name = dom.createStructureName.value.trim();
+    if (!name) return;
+    const created = await api.createStructure({
+      building_id: state.selected.buildingId,
+      name,
+    });
+    dom.createStructureName.value = "";
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    dom.structureSelect.value = String(created.id);
+    await onStructureChange();
+  }),
+);
+
+dom.createFloorForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    if (!state.selected.structureId) return;
+    const name = dom.createFloorName.value.trim();
+    if (!name) return;
+    const created = await api.createFloor({
+      structure_id: state.selected.structureId,
+      name,
+      sort_order: nextFloorSortOrder(),
+    });
+    dom.createFloorName.value = "";
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    dom.floorSelect.value = String(created.id);
+    await onFloorChange();
+  }),
+);
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));
 dom.buildingSelect.addEventListener("change", () => run(onBuildingChange));

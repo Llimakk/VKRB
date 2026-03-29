@@ -27,6 +27,30 @@ async function request(path, options = {}) {
 
 export const api = {
   getCampuses: () => request("/admin/campuses"),
+  createCampus: (payload) =>
+    request("/admin/campuses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  createBuilding: (payload) =>
+    request("/admin/buildings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  createStructure: (payload) =>
+    request("/admin/structures", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  createFloor: (payload) =>
+    request("/admin/floors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   getBuildings: (campusId) => request(`/admin/buildings?campus_id=${campusId}`),
   getStructures: (buildingId) => request(`/admin/structures?building_id=${buildingId}`),
   getFloors: (structureId) => request(`/admin/floors?structure_id=${structureId}`),
