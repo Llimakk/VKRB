@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.models import Building, Campus, Floor, Structure, Plan
+from app.services.minio_service import effective_photo_url
 from app.schemas.admin import (
     BuildingCreate,
     BuildingOut,
@@ -20,7 +21,15 @@ router = APIRouter(prefix="/admin", tags=["admin-locations"])
 
 @router.get("/campuses", response_model=list[CampusOut])
 def list_campuses(db: Session = Depends(get_db)):
-    return db.query(Campus).order_by(Campus.name).all()
+    rows = db.query(Campus).order_by(Campus.name).all()
+    return [
+        CampusOut(
+            id=c.id,
+            name=c.name,
+            photo_url=effective_photo_url(c.photo_url, c.minio_object_key),
+        )
+        for c in rows
+    ]
 
 
 @router.post("/campuses", response_model=CampusOut, status_code=status.HTTP_201_CREATED)
@@ -55,12 +64,21 @@ def delete_campus(campus_id: int, db: Session = Depends(get_db)):
 
 @router.get("/buildings", response_model=list[BuildingOut])
 def list_buildings(campus_id: int, db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(Building)
         .filter(Building.campus_id == campus_id)
         .order_by(Building.name)
         .all()
     )
+    return [
+        BuildingOut(
+            id=b.id,
+            campus_id=b.campus_id,
+            name=b.name,
+            photo_url=effective_photo_url(b.photo_url, b.minio_object_key),
+        )
+        for b in rows
+    ]
 
 
 @router.post("/buildings", response_model=BuildingOut, status_code=status.HTTP_201_CREATED)
@@ -92,12 +110,21 @@ def delete_building(building_id: int, db: Session = Depends(get_db)):
 
 @router.get("/structures", response_model=list[StructureOut])
 def list_structures(building_id: int, db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(Structure)
         .filter(Structure.building_id == building_id)
         .order_by(Structure.name)
         .all()
     )
+    return [
+        StructureOut(
+            id=s.id,
+            building_id=s.building_id,
+            name=s.name,
+            photo_url=effective_photo_url(s.photo_url, s.minio_object_key),
+        )
+        for s in rows
+    ]
 
 
 @router.post("/structures", response_model=StructureOut, status_code=status.HTTP_201_CREATED)
@@ -146,6 +173,9 @@ def list_floors(structure_id: int, db: Session = Depends(get_db)):
                 name=f.name,
                 sort_order=f.sort_order,
                 plan_id=plan.id if plan else None,
+                plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key)
+                if plan
+                else None,
             )
         )
     return out
@@ -169,12 +199,14 @@ def create_floor(payload: FloorCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Floor conflict") from e
 
     db.refresh(floor)
+    plan = db.query(Plan).filter(Plan.floor_id == floor.id).one()
     return FloorOut(
         id=floor.id,
         structure_id=floor.structure_id,
         name=floor.name,
         sort_order=floor.sort_order,
-        plan_id=db.query(Plan).filter(Plan.floor_id == floor.id).one().id,
+        plan_id=plan.id,
+        plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key),
     )
 
 

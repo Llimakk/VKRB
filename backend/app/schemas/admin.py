@@ -11,6 +11,7 @@ class CampusOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    photo_url: Optional[str] = None
 
 
 class BuildingCreate(BaseModel):
@@ -23,6 +24,7 @@ class BuildingOut(BaseModel):
     id: int
     campus_id: int
     name: str
+    photo_url: Optional[str] = None
 
 
 class StructureCreate(BaseModel):
@@ -35,6 +37,7 @@ class StructureOut(BaseModel):
     id: int
     building_id: int
     name: str
+    photo_url: Optional[str] = None
 
 
 class FloorCreate(BaseModel):
@@ -50,6 +53,7 @@ class FloorOut(BaseModel):
     name: str
     sort_order: int
     plan_id: Optional[int] = None
+    plan_photo_url: Optional[str] = None
 
 
 class ObjectTypeOut(BaseModel):

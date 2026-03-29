@@ -1,17 +1,14 @@
 import mimetypes
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from typing import Optional
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
 from app.models import Building, Campus, Floor, Object, Plan, Structure
-from sqlalchemy.orm import joinedload
 from app.services.minio_service import (
     delete_object,
-    get_plan_image_stream,
-    get_plan_image_url,
+    effective_photo_url,
     plan_object_key,
     put_plan_image,
 )
@@ -23,7 +20,7 @@ router = APIRouter(prefix="/admin", tags=["admin-plans"])
 def get_plans_tree(db: Session = Depends(get_db)):
     """
     Дерево локаций: campus -> building -> structure -> floor.
-    На узле floor возвращаем метаданные плана (картинку выдаём отдельно).
+    На узле floor — метаданные плана и photo_url для превью.
     """
     campuses = db.query(Campus).order_by(Campus.name).all()
 
@@ -54,6 +51,11 @@ def get_plans_tree(db: Session = Depends(get_db)):
                 floors_out: list[dict] = []
                 for f in floors:
                     plan = db.query(Plan).filter(Plan.floor_id == f.id).one_or_none()
+                    photo = (
+                        effective_photo_url(plan.photo_url, plan.minio_object_key)
+                        if plan
+                        else None
+                    )
                     floors_out.append(
                         {
                             "id": f.id,
@@ -63,6 +65,7 @@ def get_plans_tree(db: Session = Depends(get_db)):
                                 "id": plan.id if plan else None,
                                 "title": plan.title if plan else "",
                                 "image_exists": bool(plan.minio_object_key) if plan else False,
+                                "photo_url": photo,
                             },
                         }
                     )
@@ -88,27 +91,8 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
         "title": plan.title,
         "image_exists": bool(plan.minio_object_key),
         "mime_type": plan.mime_type,
+        "photo_url": effective_photo_url(plan.photo_url, plan.minio_object_key),
     }
-
-
-@router.get("/plans/{plan_id}/image")
-def get_plan_image(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).one_or_none()
-    if not plan or not plan.minio_object_key:
-        raise HTTPException(status_code=404, detail="Plan image not found")
-
-    content_type = plan.mime_type or "image/jpeg"
-    stream = get_plan_image_stream(plan.minio_object_key)
-    return StreamingResponse(stream, media_type=content_type)
-
-
-@router.get("/plans/{plan_id}/image-url")
-def get_plan_image_url_endpoint(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).one_or_none()
-    if not plan or not plan.minio_object_key:
-        return {"image_exists": False, "url": None}
-    url = get_plan_image_url(plan.minio_object_key)
-    return {"image_exists": True, "url": url}
 
 
 @router.get("/plans/{plan_id}")
@@ -135,6 +119,7 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
             "title": plan.title,
             "image_exists": bool(plan.minio_object_key),
             "mime_type": plan.mime_type,
+            "photo_url": effective_photo_url(plan.photo_url, plan.minio_object_key),
         },
         "objects": [
             {
@@ -161,16 +146,15 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    image_exists = bool(plan.minio_object_key)
-    image_url = get_plan_image_url(plan.minio_object_key) if image_exists else None
+    photo_url = effective_photo_url(plan.photo_url, plan.minio_object_key)
 
     return {
         "floor_id": floor_id,
         "plan": {
             "id": plan.id,
             "title": plan.title,
-            "image_exists": image_exists,
-            "image_url": image_url,
+            "image_exists": bool(plan.minio_object_key),
+            "photo_url": photo_url,
             "mime_type": plan.mime_type,
         },
         "objects": [
@@ -201,11 +185,9 @@ async def replace_plan_image(
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    # Определяем MIME: если не указано клиентом, пробуем по расширению
     content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/jpeg"
     new_key = plan_object_key(plan_id, file.filename or "plan.jpg")
 
-    # Чтобы не плодить старые объекты в Minio - удаляем прежний ключ.
     if plan.minio_object_key:
         delete_object(plan.minio_object_key)
 
@@ -213,9 +195,15 @@ async def replace_plan_image(
 
     plan.minio_object_key = new_key
     plan.mime_type = content_type
+    plan.photo_url = effective_photo_url(None, new_key)
     db.commit()
 
-    return {"id": plan.id, "minio_object_key": plan.minio_object_key, "mime_type": plan.mime_type}
+    return {
+        "id": plan.id,
+        "minio_object_key": plan.minio_object_key,
+        "mime_type": plan.mime_type,
+        "photo_url": effective_photo_url(plan.photo_url, plan.minio_object_key),
+    }
 
 
 @router.delete("/plans/{plan_id}/image")
@@ -224,13 +212,14 @@ def delete_plan_image(plan_id: int, db: Session = Depends(get_db)):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     if not plan.minio_object_key:
-        return {"status": "no_image"}
+        return {"status": "no_image", "photo_url": None}
 
     delete_object(plan.minio_object_key)
     plan.minio_object_key = None
     plan.mime_type = None
+    plan.photo_url = None
     db.commit()
-    return {"status": "deleted"}
+    return {"status": "deleted", "photo_url": None}
 
 
 @router.delete("/plans/{plan_id}")
@@ -254,4 +243,3 @@ def delete_plan(plan_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="Cannot delete plan because objects exist") from e
     return None
-

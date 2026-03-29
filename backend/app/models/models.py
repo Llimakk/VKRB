@@ -13,6 +13,7 @@ class Campus(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     buildings: Mapped[list["Building"]] = relationship(back_populates="campus", cascade="all, delete-orphan")
 
@@ -25,6 +26,7 @@ class Building(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     campus: Mapped["Campus"] = relationship(back_populates="buildings")
     structures: Mapped[list["Structure"]] = relationship(back_populates="building", cascade="all, delete-orphan")
@@ -38,6 +40,7 @@ class Structure(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     building: Mapped["Building"] = relationship(back_populates="structures")
     floors: Mapped[list["Floor"]] = relationship(back_populates="structure", cascade="all, delete-orphan")
@@ -70,6 +73,7 @@ class Plan(Base):
     # Minio object key (can be null if the admin has not uploaded yet)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

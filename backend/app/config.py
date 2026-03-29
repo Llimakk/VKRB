@@ -16,6 +16,10 @@ class Settings:
     # while the host browser must use `localhost:9000`.
     minio_public_endpoint: str = os.getenv("MINIO_PUBLIC_ENDPOINT", "")
     minio_public_secure: bool = os.getenv("MINIO_PUBLIC_SECURE", "").lower() in {"1", "true", "yes", "on"}
+    # Срок presigned URL (только если MINIO_USE_PRESIGNED=true)
+    minio_presign_expires_seconds: int = int(os.getenv("MINIO_PRESIGN_EXPIRES_SECONDS", "604800"))
+    # true: приватный bucket — ссылки presigned; false (по умолчанию): публичный bucket — прямые URL
+    minio_use_presigned: bool = os.getenv("MINIO_USE_PRESIGNED", "false").lower() in {"1", "true", "yes", "on"}
 
     def resolved_minio_public_endpoint(self) -> str:
         return self.minio_public_endpoint or self.minio_endpoint
@@ -24,6 +28,16 @@ class Settings:
         if self.minio_public_endpoint:
             return self.minio_public_secure
         return self.minio_secure
+
+    @property
+    def minio_public_base_url(self) -> str:
+        """Базовый URL Minio для браузера, например http://localhost:9000"""
+        explicit = os.getenv("MINIO_PUBLIC_BASE_URL", "").strip()
+        if explicit:
+            return explicit.rstrip("/")
+        ep = self.resolved_minio_public_endpoint()
+        scheme = "https" if self.resolved_minio_public_secure() else "http"
+        return f"{scheme}://{ep}"
 
     @classmethod
     def validate_minio(cls) -> None:

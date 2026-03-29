@@ -33,8 +33,6 @@ export const api = {
   getFloorPlan: (floorId) => request(`/admin/floors/${floorId}/plan`),
   getFloorContext: (floorId) => request(`/admin/floors/${floorId}/context`),
   getPlanDetail: (planId) => request(`/admin/plans/${planId}`),
-  getPlanImageUrl: (planId) => request(`/admin/plans/${planId}/image-url`),
-  getEntityImageUrl: (modelName, id) => request(`/admin/${modelName}/${id}/image-url`),
   uploadEntityImage: async (modelName, id, file) => {
     const fd = new FormData();
     fd.append("file", file);

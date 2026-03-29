@@ -35,6 +35,9 @@ python run.py
 - `MINIO_SECRET_KEY`
 - `MINIO_BUCKET`
 - `MINIO_SECURE`
+- `MINIO_PUBLIC_BASE_URL` (или `MINIO_PUBLIC_ENDPOINT` + схема) — базовый URL Minio для ссылок в браузере, например `http://localhost:9000`
+
+Картинки: в БД — `minio_object_key`, `mime_type`, `photo_url` (постоянная прямая ссылка на объект). **По умолчанию** ожидается **публичное чтение** bucket в MinIO: тогда `photo_url` — это `http://…:9000/<bucket>/<key>` без срока жизни. Если bucket **приватный**, задайте `MINIO_USE_PRESIGNED=true` — тогда в ответах будут presigned URL (срок — `MINIO_PRESIGN_EXPIRES_SECONDS`).
 
 ### Эндпоинты
 
@@ -51,12 +54,15 @@ CRUD дерева:
 - `POST /admin/floors`, `DELETE /admin/floors/{id}`
 
 Планы:
-- `GET /admin/plans/tree` — дерево с меткой `image_exists`
-- `GET /admin/floors/{floor_id}/plan` — метаданные плана этажа
-- `GET /admin/plans/{plan_id}` — метаданные плана + объекты на плане
-- `GET /admin/plans/{plan_id}/image` — получить JPG (байты)
-- `PUT /admin/plans/{plan_id}/image` — загрузить/заменить JPG
+- `GET /admin/plans/tree` — дерево с `image_exists` и `photo_url` на плане этажа
+- `GET /admin/floors/{floor_id}/plan` — метаданные плана этажа + `photo_url`
+- `GET /admin/floors/{floor_id}/context` — план + объекты + `photo_url`
+- `GET /admin/plans/{plan_id}` — метаданные плана + объекты на плане + `photo_url`
+- `PUT /admin/plans/{plan_id}/image` — загрузить/заменить JPG (в ответе `photo_url`)
 - `DELETE /admin/plans/{plan_id}/image` — удалить только JPG
+
+Фото кампуса/корпуса/строения:
+- `PUT /admin/{campus|building|structure}/{id}/image`, `DELETE .../image` — в ответе `photo_url`
 
 Объекты:
 - `GET /admin/floors/{floor_id}/objects`

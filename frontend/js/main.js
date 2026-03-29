@@ -1,5 +1,4 @@
 import { api } from "./api.js";
-import { API_BASE } from "./config.js";
 import { dom, fillSelect, setError } from "./dom.js";
 
 const state = {
@@ -80,14 +79,26 @@ function setMode(mode) {
   dom.emptyStateText.style.display = "none";
 }
 
-async function loadEntityImage(modelName, id) {
-  const imageUrl = await api.getEntityImageUrl(modelName, id).catch(() => null);
-  if (imageUrl?.url) {
-    dom.planImage.src = normalizeImageUrl(imageUrl.url);
-    dom.planImage.style.display = "block";
-    dom.planHint.textContent = "";
-  } else if (imageUrl?.image_exists) {
-    dom.planImage.src = `${API_BASE}/admin/${modelName}/${id}/image`;
+function pickEntityPhotoUrl(modelName, id) {
+  const lists = {
+    campus: state.campuses,
+    building: state.buildings,
+    structure: state.structures,
+  };
+  const list = lists[modelName];
+  return list?.find((i) => i.id === id)?.photo_url;
+}
+
+function setEntityPhotoUrl(modelName, id, photoUrl) {
+  const lists = { campus: state.campuses, building: state.buildings, structure: state.structures };
+  const row = lists[modelName]?.find((i) => i.id === id);
+  if (row) row.photo_url = photoUrl ?? null;
+}
+
+function loadEntityImage(modelName, id) {
+  const url = pickEntityPhotoUrl(modelName, id);
+  if (url) {
+    dom.planImage.src = normalizeImageUrl(url);
     dom.planImage.style.display = "block";
     dom.planHint.textContent = "";
   } else {
@@ -147,12 +158,8 @@ async function loadFloorContext(floorId) {
   state.selected.planId = ctx.plan.id;
   state.planDetail = { plan: ctx.plan, objects: ctx.objects };
 
-  if (ctx.plan.image_url) {
-    dom.planImage.src = normalizeImageUrl(ctx.plan.image_url);
-    dom.planImage.style.display = "block";
-    dom.planHint.textContent = "";
-  } else if (ctx.plan.image_exists) {
-    dom.planImage.src = `${API_BASE}/admin/plans/${ctx.plan.id}/image`;
+  if (ctx.plan.photo_url) {
+    dom.planImage.src = normalizeImageUrl(ctx.plan.photo_url);
     dom.planImage.style.display = "block";
     dom.planHint.textContent = "";
   } else {
@@ -179,7 +186,7 @@ async function onCampusChange() {
   dom.pageTitle.textContent = state.selected.campusId ? getSelectedName(state.campuses, state.selected.campusId) : "Админка";
   setMode("campus");
   if (state.selected.campusId) {
-    await loadEntityImage("campus", state.selected.campusId);
+    loadEntityImage("campus", state.selected.campusId);
   } else {
     clearPlanView();
   }
@@ -198,7 +205,7 @@ async function onBuildingChange() {
   if (state.selected.buildingId) {
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
     setMode("building");
-    await loadEntityImage("building", state.selected.buildingId);
+    loadEntityImage("building", state.selected.buildingId);
   }
 }
 
@@ -213,7 +220,7 @@ async function onStructureChange() {
   if (state.selected.structureId) {
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
     setMode("structure");
-    await loadEntityImage("structure", state.selected.structureId);
+    loadEntityImage("structure", state.selected.structureId);
   }
 }
 
@@ -271,7 +278,7 @@ dom.clearBuildingBtn.addEventListener("click", () =>
     fillSelect(dom.floorSelect, [], "Введите этаж", true);
     dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
     setMode("campus");
-    await loadEntityImage("campus", state.selected.campusId);
+    loadEntityImage("campus", state.selected.campusId);
     renderPath();
   }),
 );
@@ -285,7 +292,7 @@ dom.clearStructureBtn.addEventListener("click", () =>
     fillSelect(dom.floorSelect, [], "Введите этаж", true);
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
     setMode("building");
-    await loadEntityImage("building", state.selected.buildingId);
+    loadEntityImage("building", state.selected.buildingId);
     renderPath();
   }),
 );
@@ -297,7 +304,7 @@ dom.clearFloorBtn.addEventListener("click", () =>
     fillSelect(dom.floorSelect, state.floors, "Введите этаж");
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
     setMode("structure");
-    await loadEntityImage("structure", state.selected.structureId);
+    loadEntityImage("structure", state.selected.structureId);
     renderPath();
   }),
 );
@@ -327,21 +334,24 @@ dom.imageForm.addEventListener("submit", (e) =>
       return;
     }
     if (state.selected.structureId) {
-      await api.uploadEntityImage("structure", state.selected.structureId, file);
+      const res = await api.uploadEntityImage("structure", state.selected.structureId, file);
+      setEntityPhotoUrl("structure", state.selected.structureId, res?.photo_url);
       dom.imageInput.value = "";
-      await loadEntityImage("structure", state.selected.structureId);
+      loadEntityImage("structure", state.selected.structureId);
       return;
     }
     if (state.selected.buildingId) {
-      await api.uploadEntityImage("building", state.selected.buildingId, file);
+      const res = await api.uploadEntityImage("building", state.selected.buildingId, file);
+      setEntityPhotoUrl("building", state.selected.buildingId, res?.photo_url);
       dom.imageInput.value = "";
-      await loadEntityImage("building", state.selected.buildingId);
+      loadEntityImage("building", state.selected.buildingId);
       return;
     }
     if (state.selected.campusId) {
-      await api.uploadEntityImage("campus", state.selected.campusId, file);
+      const res = await api.uploadEntityImage("campus", state.selected.campusId, file);
+      setEntityPhotoUrl("campus", state.selected.campusId, res?.photo_url);
       dom.imageInput.value = "";
-      await loadEntityImage("campus", state.selected.campusId);
+      loadEntityImage("campus", state.selected.campusId);
     }
   }),
 );
@@ -354,18 +364,21 @@ dom.deleteImageBtn.addEventListener("click", () =>
       return;
     }
     if (state.selected.structureId) {
-      await api.deleteEntityImage("structure", state.selected.structureId);
-      await loadEntityImage("structure", state.selected.structureId);
+      const res = await api.deleteEntityImage("structure", state.selected.structureId);
+      setEntityPhotoUrl("structure", state.selected.structureId, res?.photo_url);
+      loadEntityImage("structure", state.selected.structureId);
       return;
     }
     if (state.selected.buildingId) {
-      await api.deleteEntityImage("building", state.selected.buildingId);
-      await loadEntityImage("building", state.selected.buildingId);
+      const res = await api.deleteEntityImage("building", state.selected.buildingId);
+      setEntityPhotoUrl("building", state.selected.buildingId, res?.photo_url);
+      loadEntityImage("building", state.selected.buildingId);
       return;
     }
     if (state.selected.campusId) {
-      await api.deleteEntityImage("campus", state.selected.campusId);
-      await loadEntityImage("campus", state.selected.campusId);
+      const res = await api.deleteEntityImage("campus", state.selected.campusId);
+      setEntityPhotoUrl("campus", state.selected.campusId, res?.photo_url);
+      loadEntityImage("campus", state.selected.campusId);
     }
   }),
 );

@@ -1,7 +1,7 @@
 import io
 import logging
 from datetime import timedelta
-from typing import Optional
+from urllib.parse import quote
 
 from minio import Minio
 from minio.error import S3Error
@@ -22,6 +22,7 @@ def _client() -> Minio:
 
 
 def _public_client() -> Minio:
+    """Клиент с endpoint/host, который видит браузер (для presigned GET)."""
     settings.validate_minio()
     return Minio(
         endpoint=settings.resolved_minio_public_endpoint(),
@@ -34,6 +35,47 @@ def _public_client() -> Minio:
 def plan_object_key(plan_id: int, filename: str) -> str:
     safe_tail = filename.replace("\\", "_").replace("/", "_")
     return f"plans/{plan_id}/{safe_tail}"
+
+
+def public_photo_url(object_key: str) -> str:
+    """Прямой path-style URL (работает только при публичном чтении bucket)."""
+    base = settings.minio_public_base_url.rstrip("/")
+    bucket = settings.minio_bucket
+    key_path = "/".join(quote(part, safe="") for part in object_key.split("/"))
+    return f"{base}/{bucket}/{key_path}"
+
+
+def presigned_photo_url(object_key: str) -> str | None:
+    """
+    Presigned GET — тот же тип доступа, что даёт «Share» в MinIO для приватного bucket,
+    но через S3 API (:9000), а не прокси консоли (:9001).
+    """
+    try:
+        client = _public_client()
+        return client.presigned_get_object(
+            settings.minio_bucket,
+            object_key,
+            expires=timedelta(seconds=settings.minio_presign_expires_seconds),
+        )
+    except Exception:
+        logger.exception("presigned_get_object failed for key=%s", object_key)
+        return None
+
+
+def effective_photo_url(saved_url: str | None, object_key: str | None) -> str | None:
+    """
+    Ссылка для <img src>.
+    По умолчанию (публичный bucket): постоянный path-style URL.
+    При MINIO_USE_PRESIGNED=true: presigned GET для приватного bucket.
+    Без ключа — возвращаем сохранённый photo_url (если был).
+    """
+    if object_key:
+        if settings.minio_use_presigned:
+            u = presigned_photo_url(object_key)
+            if u:
+                return u
+        return public_photo_url(object_key)
+    return saved_url
 
 
 def ensure_bucket_exists() -> None:
@@ -50,28 +92,6 @@ def object_exists(object_key: str) -> bool:
         return True
     except S3Error:
         return False
-
-
-def get_plan_image_stream(object_key: str):
-    client = _client()
-    resp = client.get_object(settings.minio_bucket, object_key)
-    return resp
-
-
-def get_plan_image_url(object_key: str, expires_seconds: int = 3600) -> Optional[str]:
-    """
-    Presigned GET для браузера. При любой ошибке Minio возвращаем None, чтобы API не отдавал 500.
-    """
-    try:
-        client = _public_client()
-        return client.presigned_get_object(
-            settings.minio_bucket,
-            object_key,
-            expires=timedelta(seconds=expires_seconds),
-        )
-    except Exception:
-        logger.exception("presigned_get_object failed for key=%s", object_key)
-        return None
 
 
 def entity_object_key(entity_prefix: str, entity_id: int, filename: str) -> str:
@@ -104,4 +124,3 @@ def delete_object(object_key: str) -> None:
     if not object_exists(object_key):
         return
     client.remove_object(settings.minio_bucket, object_key)
-
