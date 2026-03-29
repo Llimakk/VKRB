@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VKRB Admin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <aside class="sidebar">
+        <h2>Дерево</h2>
+
+        <label>Кампус</label>
+        <div class="select-row">
+          <select id="campusSelect"></select>
+          <button id="clearCampusBtn" type="button">✕</button>
+        </div>
+
+        <label>Корпус</label>
+        <div class="select-row">
+          <select id="buildingSelect" disabled></select>
+          <button id="clearBuildingBtn" type="button">✕</button>
+        </div>
+
+        <label>Строение</label>
+        <div class="select-row">
+          <select id="structureSelect" disabled></select>
+          <button id="clearStructureBtn" type="button">✕</button>
+        </div>
+
+        <label>Этаж</label>
+        <div class="select-row">
+          <select id="floorSelect" disabled></select>
+          <button id="clearFloorBtn" type="button">✕</button>
+        </div>
+      </aside>
+
+      <section class="content">
+        <h1 id="pageTitle">Админка</h1>
+        <p id="pathText" class="muted">Выберите кампус.</p>
+        <p id="errorText" class="error"></p>
+        <p id="emptyStateText" class="muted">Введите кампус.</p>
+
+        <div class="content-grid">
+          <section id="leftCard" class="card">
+            <h3 id="leftCardTitle">Фото</h3>
+            <img id="planImage" alt="План этажа" />
+            <p id="planHint" class="muted">Изображение не загружено.</p>
+            <form id="imageForm">
+              <input id="imageInput" type="file" accept="image/*" />
+              <button type="submit">Загрузить / заменить JPG</button>
+            </form>
+            <button id="deleteImageBtn" type="button">Удалить JPG</button>
+          </section>
+
+          <section id="rightCard" class="card">
+            <h3 id="rightCardTitle">Данные</h3>
+
+            <form id="objectForm" class="object-form">
+              <select id="typeSelect" required></select>
+              <input id="nameInput" required placeholder="Название объекта" />
+              <button type="submit">Добавить</button>
+            </form>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Тип</th>
+                  <th>Название</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="objectsTbody"></tbody>
+            </table>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
+

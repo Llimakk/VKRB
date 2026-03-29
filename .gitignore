@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+
+
+.venv/
+venv/
+ENV/
+
+
+.env
+.env.*
+.vscode/
+.idea/
+
+Thumbs.db
+Desktop.ini
+
+*.log
+
+# Build / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Example plans (large media)
+
+Планы помещений/
+
+# Frontend build artifacts
+frontend/dist/

@@ -1,0 +1,68 @@
+import { API_BASE } from "./config.js";
+
+const API_BASES = Array.from(new Set([API_BASE, "http://localhost:8000", "http://127.0.0.1:8000"]));
+
+async function request(path, options = {}) {
+  let lastNetworkError = null;
+  for (const base of API_BASES) {
+    try {
+      const res = await fetch(`${base}${path}`, options);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Ошибка API: ${res.status}`);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    } catch (e) {
+      if (e instanceof TypeError) {
+        lastNetworkError = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (lastNetworkError) throw new Error("Нет подключения к API.");
+  throw new Error("Не удалось выполнить запрос.");
+}
+
+export const api = {
+  getCampuses: () => request("/admin/campuses"),
+  getBuildings: (campusId) => request(`/admin/buildings?campus_id=${campusId}`),
+  getStructures: (buildingId) => request(`/admin/structures?building_id=${buildingId}`),
+  getFloors: (structureId) => request(`/admin/floors?structure_id=${structureId}`),
+  getFloorPlan: (floorId) => request(`/admin/floors/${floorId}/plan`),
+  getFloorContext: (floorId) => request(`/admin/floors/${floorId}/context`),
+  getPlanDetail: (planId) => request(`/admin/plans/${planId}`),
+  getPlanImageUrl: (planId) => request(`/admin/plans/${planId}/image-url`),
+  getEntityImageUrl: (modelName, id) => request(`/admin/${modelName}/${id}/image-url`),
+  uploadEntityImage: async (modelName, id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request(`/admin/${modelName}/${id}/image`, { method: "PUT", body: fd });
+  },
+  deleteEntityImage: (modelName, id) => request(`/admin/${modelName}/${id}/image`, { method: "DELETE" }),
+  getObjectTypes: () => request("/admin/object-types"),
+  createObject: (payload) =>
+    request("/admin/objects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateObject: (id, payload) =>
+    request(`/admin/objects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteObject: (id) => request(`/admin/objects/${id}`, { method: "DELETE" }),
+  uploadPlanImage: async (planId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request(`/admin/plans/${planId}/image`, {
+      method: "PUT",
+      body: fd,
+    });
+  },
+  deletePlanImage: (planId) => request(`/admin/plans/${planId}/image`, { method: "DELETE" }),
+};
+
