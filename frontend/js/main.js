@@ -49,6 +49,7 @@ function clearPlanView() {
   dom.planImage.removeAttribute("src");
   dom.planImage.style.display = "none";
   dom.planHint.textContent = "Изображение не загружено.";
+  syncDownloadButton(false);
   dom.objectsTbody.innerHTML = "";
   state.planDetail = null;
   state.selected.planId = null;
@@ -173,10 +174,12 @@ function loadEntityImage(modelName, id) {
     dom.planImage.src = normalizeImageUrl(url);
     dom.planImage.style.display = "block";
     dom.planHint.textContent = "";
+    syncDownloadButton(true);
   } else {
     dom.planImage.removeAttribute("src");
     dom.planImage.style.display = "none";
     dom.planHint.textContent = "Изображение не загружено.";
+    syncDownloadButton(false);
   }
 }
 
@@ -237,6 +240,74 @@ function closeEditObjectModal() {
   editingObjectId = null;
 }
 
+function openImageModal(src) {
+  if (!src) return;
+  dom.imageModalImg.src = normalizeImageUrl(src);
+  dom.imageModalOverlay.hidden = false;
+}
+
+function closeImageModal() {
+  dom.imageModalOverlay.hidden = true;
+  dom.imageModalImg.removeAttribute("src");
+}
+
+function syncDownloadButton(enabled) {
+  if (!dom.downloadImageBtn) return;
+  dom.downloadImageBtn.disabled = !enabled;
+}
+
+async function downloadCurrentPhoto() {
+  const url = dom.planImage.getAttribute("src");
+  if (!url) return;
+
+  const hierarchyFilename = (() => {
+    const extFromUrl = (() => {
+      try {
+        const u = new URL(url);
+        const last = u.pathname.split("/").filter(Boolean).at(-1) || "";
+        const m = last.match(/\.([a-z0-9]+)$/i);
+        return m ? `.${m[1].toLowerCase()}` : ".jpg";
+      } catch {
+        return ".jpg";
+      }
+    })();
+
+    const parts = [];
+    if (state.selected.campusId) parts.push(getSelectedName(state.campuses, state.selected.campusId));
+    if (state.selected.buildingId) parts.push(getSelectedName(state.buildings, state.selected.buildingId));
+    if (state.selected.structureId) parts.push(getSelectedName(state.structures, state.selected.structureId));
+    if (state.selected.floorId) parts.push(getSelectedName(state.floors, state.selected.floorId));
+
+    const label = (parts.filter(Boolean).join(" / ") || "photo").trim();
+    // Windows filename safety: replace invalid chars, keep unicode.
+    const safe = label
+      .replace(/\s\/\s/g, " - ")
+      .replace(/[<>:"/\\|?*]/g, "_");
+    return `${safe}${extFromUrl}`;
+  })();
+
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = hierarchyFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = hierarchyFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
 async function loadFloorContext(floorId) {
   const ctx = await api.getFloorContext(floorId);
   state.selected.planId = ctx.plan.id;
@@ -246,10 +317,12 @@ async function loadFloorContext(floorId) {
     dom.planImage.src = normalizeImageUrl(ctx.plan.photo_url);
     dom.planImage.style.display = "block";
     dom.planHint.textContent = "";
+    syncDownloadButton(true);
   } else {
     dom.planImage.removeAttribute("src");
     dom.planImage.style.display = "none";
     dom.planHint.textContent = "Изображение не загружено.";
+    syncDownloadButton(false);
   }
 
   renderObjects();
@@ -471,12 +544,28 @@ dom.editObjectForm.addEventListener("submit", (e) =>
 
 dom.cancelEditObjectBtn.addEventListener("click", () => closeEditObjectModal());
 
+dom.closeImageModalBtn.addEventListener("click", () => closeImageModal());
+
+dom.imageModalOverlay.addEventListener("click", (e) => {
+  if (e.target === dom.imageModalOverlay) closeImageModal();
+});
+
+dom.planImage.addEventListener("click", () => {
+  const src = dom.planImage.getAttribute("src");
+  if (!src) return;
+  openImageModal(src);
+});
+
+dom.downloadImageBtn.addEventListener("click", () => run(downloadCurrentPhoto));
+
 dom.modalOverlay.addEventListener("click", (e) => {
   if (e.target === dom.modalOverlay) closeEditObjectModal();
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !dom.modalOverlay.hidden) closeEditObjectModal();
+  if (e.key !== "Escape") return;
+  if (!dom.imageModalOverlay.hidden) closeImageModal();
+  else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));

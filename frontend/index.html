@@ -57,13 +57,14 @@
           <section id="photoCard" class="card photo-card">
             <h3 id="photoCardTitle">Фото</h3>
             <div id="photoBlock">
-              <img id="planImage" alt="План этажа" />
+              <img id="planImage" alt="План этажа" class="clickable-photo" />
               <p id="planHint" class="muted">Изображение не загружено.</p>
               <div class="photo-toolbar">
                 <form id="imageForm" class="photo-upload-form">
                   <input id="imageInput" type="file" accept="image/*" />
                   <button type="submit">Загрузить / заменить JPG</button>
                 </form>
+                <button id="downloadImageBtn" type="button" disabled>Скачать JPG</button>
                 <button id="deleteImageBtn" type="button">Удалить JPG</button>
               </div>
             </div>
@@ -134,6 +135,16 @@
             <button type="submit">Сохранить</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="imageModalOverlay" class="modal-overlay" hidden>
+      <div class="modal-dialog image-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
+        <h3 id="imageModalTitle" hidden>Просмотр изображения</h3>
+        <img id="imageModalImg" alt="Просмотр изображения" />
+        <div class="modal-actions image-modal-actions">
+          <button type="button" id="closeImageModalBtn" class="btn-secondary">Закрыть</button>
+        </div>
       </div>
     </div>
 
