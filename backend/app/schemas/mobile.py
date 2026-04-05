@@ -44,6 +44,7 @@ class MobileObjectOnPlan(BaseModel):
     description: Optional[str] = None
     object_type: MobileObjectTypeShort
     polygon_points: Optional[list[dict]] = None
+    nav_node_id: Optional[int] = None
 
 
 class MobileObjectSearchResult(BaseModel):
@@ -79,6 +80,7 @@ class MobileObjectDetail(BaseModel):
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
     polygon_points: Optional[list[dict]] = None
+    nav_node_id: Optional[int] = None
 
 
 class MobileFloorWithPlan(BaseModel):

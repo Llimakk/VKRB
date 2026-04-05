@@ -111,6 +111,10 @@ class Object(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     polygon_points: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{"x": 100, "y": 200}, ...]
+    # Точка входа в объект для построения маршрута
+    nav_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("nav_node.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
@@ -133,6 +137,8 @@ class NavNode(Base):
     x: Mapped[float] = mapped_column(Float, nullable=False)
     y: Mapped[float] = mapped_column(Float, nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Тип точки: room | stairs | elevator | exit | corridor | door
+    node_type: Mapped[str] = mapped_column(String(50), nullable=False, default="room")
 
     plan: Mapped["Plan"] = relationship(back_populates="nav_nodes")
     edges_from: Mapped[list["NavEdge"]] = relationship(
@@ -159,6 +165,10 @@ class NavEdge(Base):
     to_node_id: Mapped[int] = mapped_column(
         ForeignKey("nav_node.id", ondelete="CASCADE"), nullable=False
     )
+    # Физическое расстояние в метрах (вычисляется из координат при сохранении, можно переопределить)
+    distance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Весовой коэффициент для алгоритма маршрутизации (1.0 = норма, >1 = медленнее/сложнее)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
 
     from_node: Mapped["NavNode"] = relationship(back_populates="edges_from", foreign_keys=[from_node_id])
     to_node: Mapped["NavNode"] = relationship(back_populates="edges_to", foreign_keys=[to_node_id])

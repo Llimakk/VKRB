@@ -19,6 +19,7 @@ class NavNodeIn(BaseModel):
     x: float
     y: float
     name: Optional[str] = None
+    node_type: str = "room"  # room | stairs | elevator | exit | corridor
 
 
 class NavEdgeIn(BaseModel):
@@ -26,14 +27,17 @@ class NavEdgeIn(BaseModel):
 
     from_client_id: str
     to_client_id: str
+    weight: float = 1.0  # routing coefficient (1.0 = normal, >1 = slower/harder)
 
 
 class ObjectPolygonIn(BaseModel):
-    """Polygon geometry update for a single Object."""
+    """Polygon geometry and nav entry point update for a single Object."""
 
     object_id: int
     # Array of {"x": float, "y": float} dicts; null clears the geometry.
     polygon_points: Optional[list[dict[str, float]]] = None
+    # client_id of the nav_node that serves as the entry point for routing
+    nav_node_client_id: Optional[str] = None
 
     @field_validator("polygon_points")
     @classmethod
@@ -65,6 +69,7 @@ class NavNodeOut(BaseModel):
     x: float
     y: float
     name: Optional[str] = None
+    node_type: str
 
 
 class NavEdgeOut(BaseModel):
@@ -73,6 +78,8 @@ class NavEdgeOut(BaseModel):
     id: int
     from_node_id: int
     to_node_id: int
+    distance: float
+    weight: float
 
 
 class ObjectWithPolygonOut(BaseModel):
@@ -82,6 +89,7 @@ class ObjectWithPolygonOut(BaseModel):
     object_type_id: int
     object_type_name: str
     polygon_points: Optional[list[dict[str, float]]] = None
+    nav_node_id: Optional[int] = None  # entry point for routing
 
 
 class PlanGraphOut(BaseModel):

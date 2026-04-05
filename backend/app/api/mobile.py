@@ -158,6 +158,7 @@ def get_object_detail(object_id: int, db: Session = Depends(get_db)):
         plan_id=plan.id,
         plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key),
         polygon_points=obj.polygon_points,
+        nav_node_id=obj.nav_node_id,
     )
 
 
@@ -211,6 +212,7 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
                 description=o.description,
                 object_type=MobileObjectTypeShort(id=o.object_type.id, name=o.object_type.name),
                 polygon_points=o.polygon_points,
+                nav_node_id=o.nav_node_id,
             )
             for o in objs
         ]
