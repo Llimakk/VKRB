@@ -39,6 +39,10 @@ class Settings:
         scheme = "https" if self.resolved_minio_public_secure() else "http"
         return f"{scheme}://{ep}"
 
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    jwt_access_token_expire_minutes: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+
     @classmethod
     def validate_minio(cls) -> None:
         if not cls.minio_access_key or not cls.minio_secret_key:

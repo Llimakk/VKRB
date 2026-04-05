@@ -82,11 +82,13 @@ class ObjectCreate(BaseModel):
     plan_id: int
     object_type_id: int
     name: str
+    description: Optional[str] = None
 
 
 class ObjectUpdate(BaseModel):
     object_type_id: int
     name: str
+    description: Optional[str] = None
 
 
 class ObjectOut(BaseModel):
@@ -95,4 +97,5 @@ class ObjectOut(BaseModel):
     plan_id: int
     object_type: ObjectTypeOut
     name: str
+    description: Optional[str] = None
 
