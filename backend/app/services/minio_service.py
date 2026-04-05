@@ -21,15 +21,35 @@ def _client() -> Minio:
     )
 
 
-def _public_client() -> Minio:
-    """Клиент с endpoint/host, который видит браузер (для presigned GET)."""
+def _presigned_client() -> Minio:
+    """
+    Клиент для генерации presigned URL.
+
+    Сконфигурирован с публичным endpoint (localhost:9000), чтобы подпись
+    содержала Host: localhost:9000 и браузер мог открыть ссылку.
+
+    Регион получаем заранее через внутренний клиент (minio:9000 доступен
+    внутри Docker) и кладём в _region_map публичного клиента — тогда SDK
+    не делает сетевой вызов к localhost:9000 из контейнера.
+    """
     settings.validate_minio()
-    return Minio(
+
+    # Получаем регион через внутренний клиент (он доступен внутри Docker)
+    try:
+        region = _client()._get_region(settings.minio_bucket, None)
+    except Exception:
+        region = "us-east-1"
+
+    public = Minio(
         endpoint=settings.resolved_minio_public_endpoint(),
         access_key=settings.minio_access_key,
         secret_key=settings.minio_secret_key,
         secure=settings.resolved_minio_public_secure(),
     )
+    # Прописываем регион напрямую, чтобы SDK не пытался его определить
+    # по сети (localhost:9000 недоступен изнутри контейнера)
+    public._region_map[settings.minio_bucket] = region
+    return public
 
 
 def plan_object_key(plan_id: int, filename: str) -> str:
@@ -46,26 +66,14 @@ def public_photo_url(object_key: str) -> str:
 
 
 def presigned_photo_url(object_key: str) -> str | None:
-    """
-    Presigned GET для приватного bucket.
-
-    Подпись генерируется через внутренний клиент (minio:9000 — доступен внутри Docker),
-    затем хост в URL заменяется на публичный endpoint (localhost:9000 — доступен браузеру).
-    Это стандартный подход для MinIO за Docker-прокси.
-    """
+    """Presigned GET URL для приватного bucket."""
     try:
-        client = _client()
-        url = client.presigned_get_object(
+        client = _presigned_client()
+        return client.presigned_get_object(
             settings.minio_bucket,
             object_key,
             expires=timedelta(seconds=settings.minio_presign_expires_seconds),
         )
-        # Заменяем внутренний хост на публичный, чтобы браузер мог открыть ссылку
-        internal_base = ("https://" if settings.minio_secure else "http://") + settings.minio_endpoint
-        public_base = settings.minio_public_base_url.rstrip("/")
-        if internal_base != public_base:
-            url = url.replace(internal_base, public_base, 1)
-        return url
     except Exception:
         logger.exception("presigned_get_object failed for key=%s", object_key)
         return None
