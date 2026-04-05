@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -75,11 +76,18 @@ class Plan(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Physical dimensions (set via the floor plan editor)
+    real_width: Mapped[float | None] = mapped_column(Float, nullable=True)
+    real_height: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resolution: Mapped[float | None] = mapped_column(Float, nullable=True)  # px/m
+    editor_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     floor: Mapped["Floor"] = relationship(back_populates="plan")
     objects: Mapped[list["Object"]] = relationship(back_populates="plan", cascade="save-update", passive_deletes=True)
+    nav_nodes: Mapped[list["NavNode"]] = relationship(back_populates="plan", cascade="all, delete-orphan")
 
 
 class ObjectType(Base):
@@ -102,6 +110,7 @@ class Object(Base):
     object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="RESTRICT"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    polygon_points: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{"x": 100, "y": 200}, ...]
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
@@ -111,6 +120,51 @@ class Object(Base):
 
     __table_args__ = (
         UniqueConstraint("plan_id", "object_type_id", "name", name="uq_object_plan_type_name"),
+    )
+
+
+class NavNode(Base):
+    """Navigation graph node — a point on the floor plan used for routing."""
+
+    __tablename__ = "nav_node"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id", ondelete="CASCADE"), nullable=False)
+    x: Mapped[float] = mapped_column(Float, nullable=False)
+    y: Mapped[float] = mapped_column(Float, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    plan: Mapped["Plan"] = relationship(back_populates="nav_nodes")
+    edges_from: Mapped[list["NavEdge"]] = relationship(
+        back_populates="from_node",
+        foreign_keys="NavEdge.from_node_id",
+        cascade="all, delete-orphan",
+    )
+    edges_to: Mapped[list["NavEdge"]] = relationship(
+        back_populates="to_node",
+        foreign_keys="NavEdge.to_node_id",
+        cascade="all, delete-orphan",
+    )
+
+
+class NavEdge(Base):
+    """Navigation graph edge — undirected connection between two NavNodes."""
+
+    __tablename__ = "nav_edge"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_node_id: Mapped[int] = mapped_column(
+        ForeignKey("nav_node.id", ondelete="CASCADE"), nullable=False
+    )
+    to_node_id: Mapped[int] = mapped_column(
+        ForeignKey("nav_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    from_node: Mapped["NavNode"] = relationship(back_populates="edges_from", foreign_keys=[from_node_id])
+    to_node: Mapped["NavNode"] = relationship(back_populates="edges_to", foreign_keys=[to_node_id])
+
+    __table_args__ = (
+        UniqueConstraint("from_node_id", "to_node_id", name="uq_nav_edge_pair"),
     )
 
 

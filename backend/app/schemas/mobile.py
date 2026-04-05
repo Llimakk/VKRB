@@ -43,6 +43,7 @@ class MobileObjectOnPlan(BaseModel):
     name: str
     description: Optional[str] = None
     object_type: MobileObjectTypeShort
+    polygon_points: Optional[list[dict]] = None
 
 
 class MobileObjectSearchResult(BaseModel):
@@ -77,6 +78,7 @@ class MobileObjectDetail(BaseModel):
     campus_name: str
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
+    polygon_points: Optional[list[dict]] = None
 
 
 class MobileFloorWithPlan(BaseModel):
