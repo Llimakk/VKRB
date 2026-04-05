@@ -47,16 +47,25 @@ def public_photo_url(object_key: str) -> str:
 
 def presigned_photo_url(object_key: str) -> str | None:
     """
-    Presigned GET — тот же тип доступа, что даёт «Share» в MinIO для приватного bucket,
-    но через S3 API (:9000), а не прокси консоли (:9001).
+    Presigned GET для приватного bucket.
+
+    Подпись генерируется через внутренний клиент (minio:9000 — доступен внутри Docker),
+    затем хост в URL заменяется на публичный endpoint (localhost:9000 — доступен браузеру).
+    Это стандартный подход для MinIO за Docker-прокси.
     """
     try:
-        client = _public_client()
-        return client.presigned_get_object(
+        client = _client()
+        url = client.presigned_get_object(
             settings.minio_bucket,
             object_key,
             expires=timedelta(seconds=settings.minio_presign_expires_seconds),
         )
+        # Заменяем внутренний хост на публичный, чтобы браузер мог открыть ссылку
+        internal_base = ("https://" if settings.minio_secure else "http://") + settings.minio_endpoint
+        public_base = settings.minio_public_base_url.rstrip("/")
+        if internal_base != public_base:
+            url = url.replace(internal_base, public_base, 1)
+        return url
     except Exception:
         logger.exception("presigned_get_object failed for key=%s", object_key)
         return None
