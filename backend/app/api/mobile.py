@@ -17,8 +17,13 @@ from app.schemas.mobile import (
     MobileObjectTypeShort,
     MobilePlanInfo,
     MobileStructureItem,
+    PlanSegment,
+    RouteRequest,
+    RouteResponse,
+    RouteStep,
 )
 from app.services.minio_service import effective_photo_url
+from app.services.routing import compute_route
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
@@ -224,4 +229,41 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
         if plan
         else None,
         objects=objects,
+    )
+
+
+@router.post("/route", response_model=RouteResponse)
+def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
+    try:
+        route = compute_route(db, payload.from_object_id, payload.to_object_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return RouteResponse(
+        from_object_id=route.from_object_id,
+        to_object_id=route.to_object_id,
+        total_distance=route.total_distance,
+        steps=[
+            RouteStep(
+                step=s.step,
+                instruction=s.instruction,
+                node_id=s.node_id,
+                node_type=s.node_type,
+                node_name=s.node_name,
+                plan_id=s.plan_id,
+                floor_name=s.floor_name,
+                x=s.x,
+                y=s.y,
+            )
+            for s in route.steps
+        ],
+        segments=[
+            PlanSegment(
+                plan_id=seg.plan_id,
+                floor_name=seg.floor_name,
+                plan_photo_url=seg.plan_photo_url,
+                polyline=seg.polyline,
+            )
+            for seg in route.segments
+        ],
     )

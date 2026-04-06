@@ -97,3 +97,36 @@ class MobileFloorPlanResponse(BaseModel):
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
     objects: list[MobileObjectOnPlan]
+
+
+class RouteRequest(BaseModel):
+    from_object_id: int
+    to_object_id: int
+
+
+class RouteStep(BaseModel):
+    step: int
+    instruction: str
+    node_id: int
+    node_type: str
+    node_name: Optional[str] = None
+    plan_id: int
+    floor_name: str
+    x: float
+    y: float
+
+
+class PlanSegment(BaseModel):
+    plan_id: int
+    floor_name: str
+    plan_photo_url: Optional[str] = None
+    # Ordered coordinates for drawing the route polyline on the plan image
+    polyline: list[dict]
+
+
+class RouteResponse(BaseModel):
+    from_object_id: int
+    to_object_id: int
+    total_distance: float  # metres
+    steps: list[RouteStep]
+    segments: list[PlanSegment]
