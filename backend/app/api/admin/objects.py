@@ -40,6 +40,8 @@ def create_object(payload: ObjectCreate, db: Session = Depends(get_db)):
         plan_id=payload.plan_id,
         object_type_id=payload.object_type_id,
         name=payload.name,
+        pos_x=payload.pos_x,
+        pos_y=payload.pos_y,
     )
     db.add(obj)
     try:
@@ -68,6 +70,8 @@ def update_object(object_id: int, payload: ObjectUpdate, db: Session = Depends(g
 
     obj.object_type_id = payload.object_type_id
     obj.name = payload.name
+    obj.pos_x = payload.pos_x
+    obj.pos_y = payload.pos_y
     try:
         db.commit()
     except IntegrityError as e:

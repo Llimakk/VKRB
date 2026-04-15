@@ -15,6 +15,10 @@ const state = {
     planId: null,
   },
   planDetail: null,
+  placement: {
+    objectId: null,
+  },
+  focusedObjectId: null,
 };
 
 function getSelectedName(items, id) {
@@ -51,11 +55,15 @@ function clearPlanView() {
   dom.planHint.textContent = "Изображение не загружено.";
   syncDownloadButton(false);
   dom.objectsTbody.innerHTML = "";
+  dom.planMarkers.innerHTML = "";
+  state.placement.objectId = null;
+  state.focusedObjectId = null;
   state.planDetail = null;
   state.selected.planId = null;
 }
 
 let editingObjectId = null;
+let confirmResolver = null;
 
 const CREATE_LABELS = {
   none: { title: "Создать новый кампус", placeholder: "Введите название кампуса" },
@@ -188,6 +196,10 @@ function renderObjects() {
   dom.objectsTbody.innerHTML = "";
   for (const obj of objects) {
     const tr = document.createElement("tr");
+    tr.dataset.objectId = String(obj.id);
+    if (state.focusedObjectId === obj.id) {
+      tr.classList.add("object-row-selected");
+    }
 
     const typeCell = document.createElement("td");
     typeCell.textContent = obj.object_type.name;
@@ -208,16 +220,116 @@ function renderObjects() {
     deleteBtn.type = "button";
     deleteBtn.textContent = "Удалить";
     deleteBtn.onclick = async () => {
-      if (!confirm("Удалить объект?")) return;
+      const confirmed = await askConfirmation({
+        title: "Удаление объекта",
+        message: `Удалить объект "${obj.name}"?`,
+        okText: "Удалить",
+        cancelText: "Отмена",
+      });
+      if (!confirmed) return;
       await api.deleteObject(obj.id);
       await loadFloorContext(state.selected.floorId);
     };
 
+    const placeBtn = document.createElement("button");
+    placeBtn.type = "button";
+    placeBtn.textContent = obj.pos_x != null && obj.pos_y != null ? "Переставить на плане" : "Указать на плане";
+    placeBtn.className = state.placement.objectId === obj.id ? "is-active" : "";
+    placeBtn.onclick = () => startPlacementForObject(obj.id);
+
+    const clearMarkBtn = document.createElement("button");
+    clearMarkBtn.type = "button";
+    clearMarkBtn.textContent = "Удалить отметку на плане";
+    clearMarkBtn.disabled = obj.pos_x == null || obj.pos_y == null;
+    clearMarkBtn.onclick = async () => {
+      await api.updateObject(obj.id, {
+        object_type_id: obj.object_type.id,
+        name: obj.name,
+        pos_x: null,
+        pos_y: null,
+      });
+      if (state.placement.objectId === obj.id) {
+        state.placement.objectId = null;
+      }
+      await loadFloorContext(state.selected.floorId);
+      dom.planHint.textContent = "Отметка объекта удалена.";
+    };
+
     wrap.append(editBtn, deleteBtn);
+    wrap.append(placeBtn);
+    wrap.append(clearMarkBtn);
     actionCell.appendChild(wrap);
     tr.append(typeCell, nameCell, actionCell);
     dom.objectsTbody.appendChild(tr);
   }
+}
+
+function renderPlanMarkersIn(container, selectedObjectId = null) {
+  container.innerHTML = "";
+  const objects = state.planDetail?.objects || [];
+  for (const obj of objects) {
+    if (obj.pos_x == null || obj.pos_y == null) continue;
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.className = `plan-marker${selectedObjectId === obj.id ? " is-selected" : ""}`;
+    marker.style.left = `${obj.pos_x * 100}%`;
+    marker.style.top = `${obj.pos_y * 100}%`;
+    marker.title = `${obj.object_type.name}: ${obj.name}`;
+    marker.setAttribute("aria-label", marker.title);
+    marker.style.pointerEvents = "auto";
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      if (state.placement.objectId != null) {
+        startPlacementForObject(obj.id);
+        return;
+      }
+      focusObjectInList(obj.id);
+    };
+    container.appendChild(marker);
+  }
+}
+
+function renderPlanMarkers() {
+  renderPlanMarkersIn(dom.planMarkers, state.placement.objectId);
+  renderPlanMarkersIn(dom.imageModalMarkers, state.placement.objectId);
+}
+
+function startPlacementForObject(objectId) {
+  if (!state.selected.floorId || !dom.planImage.getAttribute("src")) return;
+  state.placement.objectId = objectId;
+  const obj = (state.planDetail?.objects || []).find((x) => x.id === objectId);
+  const objectName = obj?.name || "объект";
+  dom.planHint.textContent = `Режим установки точки: ${objectName}. Кликните по месту аудитории на плане.`;
+  openImageModal(dom.planImage.getAttribute("src"), {
+    placementMode: true,
+    objectName,
+  });
+  renderObjects();
+  renderPlanMarkers();
+}
+
+function focusObjectInList(objectId) {
+  state.focusedObjectId = objectId;
+  if (!dom.imageModalOverlay.hidden) {
+    closeImageModal();
+  } else {
+    renderPlanMarkers();
+  }
+  renderObjects();
+  const row = dom.objectsTbody.querySelector(`tr[data-object-id="${objectId}"]`);
+  if (row) {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function getNormalizedImageCoordsFromEvent(event, targetImage) {
+  const rect = targetImage.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  const nx = Math.max(0, Math.min(1, x));
+  const ny = Math.max(0, Math.min(1, y));
+  return { x: nx, y: ny };
 }
 
 function openEditObjectModal(obj) {
@@ -240,15 +352,52 @@ function closeEditObjectModal() {
   editingObjectId = null;
 }
 
-function openImageModal(src) {
+function openImageModal(src, options = {}) {
   if (!src) return;
   dom.imageModalImg.src = normalizeImageUrl(src);
+  dom.imageModalHint.textContent = options.placementMode
+    ? `Установка точки для: ${options.objectName}. Кликните по плану.`
+    : "";
+  dom.closeImageModalBtn.textContent = options.placementMode ? "Закрыть (отмена)" : "Закрыть";
+  renderPlanMarkers();
   dom.imageModalOverlay.hidden = false;
 }
 
 function closeImageModal() {
+  if (state.placement.objectId != null) {
+    state.placement.objectId = null;
+    dom.planHint.textContent = "Установка точки отменена.";
+    renderObjects();
+    renderPlanMarkers();
+  }
   dom.imageModalOverlay.hidden = true;
   dom.imageModalImg.removeAttribute("src");
+  dom.imageModalHint.textContent = "";
+  dom.imageModalMarkers.innerHTML = "";
+  dom.closeImageModalBtn.textContent = "Закрыть";
+}
+
+function closeConfirmModal(result = false) {
+  if (!dom.confirmOverlay || dom.confirmOverlay.hidden) return;
+  dom.confirmOverlay.hidden = true;
+  const resolve = confirmResolver;
+  confirmResolver = null;
+  if (resolve) resolve(result);
+}
+
+function askConfirmation({ title, message, okText = "Подтвердить", cancelText = "Закрыть" }) {
+  if (confirmResolver) {
+    closeConfirmModal(false);
+  }
+  dom.confirmTitle.textContent = title || "Подтверждение";
+  dom.confirmMessage.textContent = message || "";
+  dom.confirmOkBtn.textContent = okText;
+  dom.confirmCancelBtn.textContent = cancelText;
+  dom.confirmOverlay.hidden = false;
+  dom.confirmOkBtn.focus();
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
 }
 
 function syncDownloadButton(enabled) {
@@ -326,6 +475,7 @@ async function loadFloorContext(floorId) {
   }
 
   renderObjects();
+  renderPlanMarkers();
 }
 
 async function onCampusChange() {
@@ -553,10 +703,36 @@ dom.imageModalOverlay.addEventListener("click", (e) => {
 dom.planImage.addEventListener("click", () => {
   const src = dom.planImage.getAttribute("src");
   if (!src) return;
-  openImageModal(src);
+  openImageModal(src, { placementMode: false });
 });
 
+dom.imageModalStage.addEventListener("click", (e) =>
+  run(async () => {
+    if (state.placement.objectId == null) return;
+    const coords = getNormalizedImageCoordsFromEvent(e, dom.imageModalImg);
+    if (!coords) return;
+    const obj = (state.planDetail?.objects || []).find((x) => x.id === state.placement.objectId);
+    if (!obj) return;
+    await api.updateObject(obj.id, {
+      object_type_id: obj.object_type.id,
+      name: obj.name,
+      pos_x: coords.x,
+      pos_y: coords.y,
+    });
+    state.placement.objectId = null;
+    closeImageModal();
+    await loadFloorContext(state.selected.floorId);
+    dom.planHint.textContent = "Точка объекта сохранена.";
+  }),
+);
+
 dom.downloadImageBtn.addEventListener("click", () => run(downloadCurrentPhoto));
+
+dom.confirmOkBtn.addEventListener("click", () => closeConfirmModal(true));
+dom.confirmCancelBtn.addEventListener("click", () => closeConfirmModal(false));
+dom.confirmOverlay.addEventListener("click", (e) => {
+  if (e.target === dom.confirmOverlay) closeConfirmModal(false);
+});
 
 dom.modalOverlay.addEventListener("click", (e) => {
   if (e.target === dom.modalOverlay) closeEditObjectModal();
@@ -564,7 +740,8 @@ dom.modalOverlay.addEventListener("click", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!dom.imageModalOverlay.hidden) closeImageModal();
+  if (!dom.confirmOverlay.hidden) closeConfirmModal(false);
+  else if (!dom.imageModalOverlay.hidden) closeImageModal();
   else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
 
@@ -627,9 +804,18 @@ dom.objectForm.addEventListener("submit", (e) =>
     const object_type_id = Number(dom.typeSelect.value);
     const name = dom.nameInput.value.trim();
     if (!object_type_id || !name) return;
-    await api.createObject({ plan_id: state.selected.planId, object_type_id, name });
+    const created = await api.createObject({ plan_id: state.selected.planId, object_type_id, name });
     dom.nameInput.value = "";
     await loadFloorContext(state.selected.floorId);
+    const shouldPlaceNow = await askConfirmation({
+      title: "Отметка на плане",
+      message: `Объект "${created.name}" создан. Указать отметку на плане сейчас?`,
+      okText: "Указать",
+      cancelText: "Закрыть",
+    });
+    if (shouldPlaceNow) {
+      startPlacementForObject(created.id);
+    }
   }),
 );
 

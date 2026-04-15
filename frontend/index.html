@@ -57,7 +57,10 @@
           <section id="photoCard" class="card photo-card">
             <h3 id="photoCardTitle">Фото</h3>
             <div id="photoBlock">
-              <img id="planImage" alt="План этажа" class="clickable-photo" />
+              <div id="planStage" class="plan-stage">
+                <img id="planImage" alt="План этажа" class="clickable-photo" />
+                <div id="planMarkers" class="plan-markers"></div>
+              </div>
               <p id="planHint" class="muted">Изображение не загружено.</p>
               <div class="photo-toolbar">
                 <form id="imageForm" class="photo-upload-form">
@@ -141,9 +144,24 @@
     <div id="imageModalOverlay" class="modal-overlay" hidden>
       <div class="modal-dialog image-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
         <h3 id="imageModalTitle" hidden>Просмотр изображения</h3>
-        <img id="imageModalImg" alt="Просмотр изображения" />
+        <div id="imageModalStage" class="image-modal-stage">
+          <img id="imageModalImg" alt="Просмотр изображения" />
+          <div id="imageModalMarkers" class="plan-markers image-modal-markers"></div>
+        </div>
+        <p id="imageModalHint" class="muted image-modal-hint"></p>
         <div class="modal-actions image-modal-actions">
           <button type="button" id="closeImageModalBtn" class="btn-secondary">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirmOverlay" class="modal-overlay" hidden>
+      <div class="modal-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <h3 id="confirmTitle">Подтверждение</h3>
+        <p id="confirmMessage" class="muted confirm-message"></p>
+        <div class="modal-actions">
+          <button type="button" id="confirmCancelBtn" class="btn-secondary">Закрыть</button>
+          <button type="button" id="confirmOkBtn">Подтвердить</button>
         </div>
       </div>
     </div>

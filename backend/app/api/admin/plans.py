@@ -126,6 +126,8 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
                 "id": o.id,
                 "name": o.name,
                 "object_type": {"id": o.object_type.id, "name": o.object_type.name},
+                "pos_x": o.pos_x,
+                "pos_y": o.pos_y,
             }
             for o in objects
         ],
@@ -162,6 +164,8 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
                 "id": o.id,
                 "name": o.name,
                 "object_type": {"id": o.object_type.id, "name": o.object_type.name},
+                "pos_x": o.pos_x,
+                "pos_y": o.pos_y,
             }
             for o in objects
         ],

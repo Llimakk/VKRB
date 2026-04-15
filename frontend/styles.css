@@ -107,7 +107,7 @@ body {
 }
 
 .objects-card {
-  max-width: min(62%, 540px);
+  max-width: min(82%, 860px);
   width: 100%;
 }
 
@@ -133,6 +133,11 @@ button {
   gap: 6px;
 }
 
+.plan-stage {
+  position: relative;
+  width: 100%;
+}
+
 #planImage {
   width: 100%;
   max-height: 70vh;
@@ -140,6 +145,36 @@ button {
   border: 1px solid #ddd;
   border-radius: 6px;
   display: none;
+}
+
+#planMarkers {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.plan-marker {
+  position: absolute;
+  padding: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #fff;
+  background: #1976d2;
+  appearance: none;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.plan-marker.is-selected {
+  background: #d32f2f;
+}
+
+.actions button.is-active {
+  border-color: #d32f2f;
+  color: #d32f2f;
 }
 
 #photoBlock {
@@ -174,8 +209,19 @@ td {
   border-bottom: 1px solid #eee;
 }
 
+.object-row-selected td {
+  background: #e3f2fd;
+  border-top: 1px solid #64b5f6;
+  border-bottom: 1px solid #64b5f6;
+}
+
+.object-row-selected td:first-child {
+  border-left: 4px solid #1e88e5;
+}
+
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -261,6 +307,15 @@ td {
   width: 100%;
 }
 
+.confirm-dialog {
+  max-width: 460px;
+}
+
+.confirm-message {
+  margin: 10px 0 0;
+  line-height: 1.45;
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;
@@ -297,6 +352,12 @@ td {
   align-items: center;
 }
 
+.image-modal-stage {
+  position: relative;
+  max-width: 95vw;
+  max-height: 92vh;
+}
+
 #imageModalImg {
   width: auto;
   max-width: 95vw;
@@ -306,6 +367,16 @@ td {
   border: none;
   border-radius: 0;
   margin: 0 auto;
+}
+
+.image-modal-markers {
+  z-index: 2;
+}
+
+.image-modal-hint {
+  margin: 10px 0 0;
+  color: #f1f1f1;
+  text-align: center;
 }
 
 .image-modal-actions {
