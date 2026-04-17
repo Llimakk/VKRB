@@ -271,16 +271,43 @@ function renderObjects() {
   }
 }
 
-function renderPlanMarkersIn(container, selectedObjectId = null) {
+/** Pixel box of the bitmap as laid out with object-fit:contain inside the img element. */
+function getObjectFitContainMetrics(img) {
+  const rect = img.getBoundingClientRect();
+  const elW = rect.width;
+  const elH = rect.height;
+  if (!elW || !elH) return null;
+  const natW = img.naturalWidth;
+  const natH = img.naturalHeight;
+  if (!natW || !natH) {
+    return { elW, elH, offX: 0, offY: 0, dispW: elW, dispH: elH };
+  }
+  const scale = Math.min(elW / natW, elH / natH);
+  const dispW = natW * scale;
+  const dispH = natH * scale;
+  const offX = (elW - dispW) / 2;
+  const offY = (elH - dispH) / 2;
+  return { elW, elH, offX, offY, dispW, dispH };
+}
+
+function renderPlanMarkersIn(container, imgEl, selectedObjectId = null) {
   container.innerHTML = "";
   const objects = state.planDetail?.objects || [];
+  const m = getObjectFitContainMetrics(imgEl);
   for (const obj of objects) {
     if (obj.pos_x == null || obj.pos_y == null) continue;
     const marker = document.createElement("button");
     marker.type = "button";
     marker.className = `plan-marker${selectedObjectId === obj.id ? " is-selected" : ""}`;
-    marker.style.left = `${obj.pos_x * 100}%`;
-    marker.style.top = `${obj.pos_y * 100}%`;
+    if (m) {
+      const leftPct = ((m.offX + obj.pos_x * m.dispW) / m.elW) * 100;
+      const topPct = ((m.offY + obj.pos_y * m.dispH) / m.elH) * 100;
+      marker.style.left = `${leftPct}%`;
+      marker.style.top = `${topPct}%`;
+    } else {
+      marker.style.left = `${obj.pos_x * 100}%`;
+      marker.style.top = `${obj.pos_y * 100}%`;
+    }
     marker.title = `${obj.object_type.name}: ${obj.name}`;
     marker.setAttribute("aria-label", marker.title);
     marker.style.pointerEvents = "auto";
@@ -297,8 +324,22 @@ function renderPlanMarkersIn(container, selectedObjectId = null) {
 }
 
 function renderPlanMarkers() {
-  renderPlanMarkersIn(dom.planMarkers, state.placement.objectId);
-  renderPlanMarkersIn(dom.imageModalMarkers, state.placement.objectId);
+  if (
+    state.planDetail &&
+    dom.planImage.style.display !== "none" &&
+    dom.planImage.getAttribute("src")
+  ) {
+    renderPlanMarkersIn(dom.planMarkers, dom.planImage, state.placement.objectId);
+  } else {
+    dom.planMarkers.innerHTML = "";
+  }
+  if (
+    state.planDetail &&
+    !dom.imageModalOverlay.hidden &&
+    dom.imageModalImg.getAttribute("src")
+  ) {
+    renderPlanMarkersIn(dom.imageModalMarkers, dom.imageModalImg, state.placement.objectId);
+  }
 }
 
 function startPlacementForObject(objectId) {
@@ -330,10 +371,13 @@ function focusObjectInList(objectId) {
 }
 
 function getNormalizedImageCoordsFromEvent(event, targetImage) {
+  const m = getObjectFitContainMetrics(targetImage);
+  if (!m) return null;
   const rect = targetImage.getBoundingClientRect();
-  if (!rect.width || !rect.height) return null;
-  const x = (event.clientX - rect.left) / rect.width;
-  const y = (event.clientY - rect.top) / rect.height;
+  const cx = event.clientX - rect.left;
+  const cy = event.clientY - rect.top;
+  const x = (cx - m.offX) / m.dispW;
+  const y = (cy - m.offY) / m.dispH;
   const nx = Math.max(0, Math.min(1, x));
   const ny = Math.max(0, Math.min(1, y));
   return { x: nx, y: ny };
@@ -897,8 +941,20 @@ async function run(fn) {
   }
 }
 
+function initPlanMarkerLayoutListeners() {
+  const refresh = () => {
+    if (state.planDetail) renderPlanMarkers();
+  };
+  dom.planImage.addEventListener("load", refresh);
+  dom.imageModalImg.addEventListener("load", refresh);
+  const ro = new ResizeObserver(refresh);
+  ro.observe(dom.planStage);
+  ro.observe(dom.imageModalStage);
+}
+
 run(async () => {
   await Promise.all([loadInitialLists(), initObjectTypes()]);
+  initPlanMarkerLayoutListeners();
 });
 
 function normalizeImageUrl(url) {

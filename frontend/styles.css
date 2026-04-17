@@ -407,7 +407,10 @@ td {
   margin: 0 auto;
 }
 
-.image-modal-markers {
+#imageModalMarkers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   z-index: 2;
 }
 
