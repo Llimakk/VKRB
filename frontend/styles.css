@@ -107,7 +107,7 @@ body {
 }
 
 .objects-card {
-  max-width: min(82%, 860px);
+  max-width: 100%;
   width: 100%;
 }
 
@@ -207,6 +207,44 @@ td {
   text-align: left;
   padding: 8px;
   border-bottom: 1px solid #eee;
+}
+
+.mark-legend {
+  margin: 0 0 10px 0;
+}
+
+.mark-col-head {
+  width: 26px;
+  padding-right: 4px;
+}
+
+.mark-cell {
+  width: 26px;
+  padding-right: 4px;
+}
+
+.mark-cell,
+.mark-col-head {
+  text-align: center;
+}
+
+.mark-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  vertical-align: middle;
+  border: 1px solid #cfcfcf;
+}
+
+.mark-dot.is-on {
+  background: #2e7d32;
+  border-color: #2e7d32;
+}
+
+.mark-dot.is-off {
+  background: #e0e0e0;
+  border-color: #bdbdbd;
 }
 
 .object-row-selected td {

@@ -100,6 +100,10 @@
           <section id="rightCard" class="card objects-card">
             <h3 id="rightCardTitle">Данные</h3>
 
+            <p class="muted mark-legend">
+              Серая точка — объект не отмечен на плане. Зелёная — отметка на плане уже есть.
+            </p>
+
             <form id="objectForm" class="object-form">
               <select id="typeSelect" required></select>
               <input id="nameInput" required placeholder="Название объекта" />
@@ -109,6 +113,7 @@
             <table>
               <thead>
                 <tr>
+                  <th class="mark-col-head"></th>
                   <th>Тип</th>
                   <th>Название</th>
                   <th>Действия</th>

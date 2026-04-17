@@ -44,6 +44,5 @@ class Settings:
         if not cls.minio_access_key or not cls.minio_secret_key:
             raise RuntimeError("Minio credentials are missing (MINIO_ACCESS_KEY / MINIO_SECRET_KEY)")
 
-
 settings = Settings()
 

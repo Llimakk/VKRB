@@ -201,6 +201,13 @@ function renderObjects() {
       tr.classList.add("object-row-selected");
     }
 
+    const markCell = document.createElement("td");
+    markCell.className = "mark-cell";
+    const mark = document.createElement("span");
+    mark.className = `mark-dot${obj.pos_x != null && obj.pos_y != null ? " is-on" : " is-off"}`;
+    mark.title = obj.pos_x != null && obj.pos_y != null ? "Отметка на плане есть" : "Отметки на плане нет";
+    markCell.appendChild(mark);
+
     const typeCell = document.createElement("td");
     typeCell.textContent = obj.object_type.name;
 
@@ -259,7 +266,7 @@ function renderObjects() {
     wrap.append(placeBtn);
     wrap.append(clearMarkBtn);
     actionCell.appendChild(wrap);
-    tr.append(typeCell, nameCell, actionCell);
+    tr.append(markCell, typeCell, nameCell, actionCell);
     dom.objectsTbody.appendChild(tr);
   }
 }
