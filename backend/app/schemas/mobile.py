@@ -79,6 +79,8 @@ class MobileObjectDetail(BaseModel):
     campus_name: str
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
+    image_pixel_width: Optional[float] = None
+    image_pixel_height: Optional[float] = None
     polygon_points: Optional[list[dict]] = None
     nav_node_id: Optional[int] = None
 
@@ -96,6 +98,11 @@ class MobileFloorPlanResponse(BaseModel):
     floor_name: str
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
+    # Original image dimensions in pixels (real_width * resolution, real_height * resolution).
+    # Use these to compute the scale factor: scale = rendered_size / image_pixel_width (or height).
+    # polygon_points and nav_node coordinates are in this pixel coordinate space.
+    image_pixel_width: Optional[float] = None
+    image_pixel_height: Optional[float] = None
     objects: list[MobileObjectOnPlan]
 
 
@@ -107,6 +114,10 @@ class RouteRequest(BaseModel):
 class RouteStep(BaseModel):
     step: int
     instruction: str
+    # Icon hint: start | destination | straight | turn_left | turn_right |
+    #            stairs_up | stairs_down | elevator_up | elevator_down | exit | door
+    direction: str
+    distance_m: float   # distance from this waypoint to the next step (0 for last)
     node_id: int
     node_type: str
     node_name: Optional[str] = None
@@ -120,6 +131,8 @@ class PlanSegment(BaseModel):
     plan_id: int
     floor_name: str
     plan_photo_url: Optional[str] = None
+    image_pixel_width: Optional[float] = None
+    image_pixel_height: Optional[float] = None
     # Ordered coordinates for drawing the route polyline on the plan image
     polyline: list[dict]
 

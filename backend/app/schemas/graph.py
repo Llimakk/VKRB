@@ -31,9 +31,10 @@ class NavEdgeIn(BaseModel):
 
 
 class ObjectPolygonIn(BaseModel):
-    """Polygon geometry and nav entry point update for a single Object."""
+    """Polygon geometry, nav entry point, and description update for a single Object."""
 
     object_id: int
+    description: Optional[str] = None
     # Array of {"x": float, "y": float} dicts; null clears the geometry.
     polygon_points: Optional[list[dict[str, float]]] = None
     # client_id of the nav_node that serves as the entry point for routing
@@ -58,6 +59,13 @@ class PlanGraphIn(BaseModel):
     nav_nodes: list[NavNodeIn] = []
     nav_edges: list[NavEdgeIn] = []
     object_polygons: list[ObjectPolygonIn] = []
+
+
+class PlanDimensionsIn(BaseModel):
+    """Patch just the physical dimensions of a plan without touching the nav graph."""
+    real_width: float
+    real_height: float
+    resolution: float  # px/m
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────

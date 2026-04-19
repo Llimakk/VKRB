@@ -20,6 +20,7 @@ from app.schemas.graph import (
     NavEdgeOut,
     NavNodeOut,
     ObjectWithPolygonOut,
+    PlanDimensionsIn,
     PlanGraphIn,
     PlanGraphOut,
 )
@@ -87,6 +88,20 @@ def _build_graph_out(plan: Plan, db: Session) -> PlanGraphOut:
             for o in objects
         ],
     )
+
+
+@router.patch("/plans/{plan_id}/dimensions", response_model=PlanGraphOut)
+def patch_plan_dimensions(plan_id: int, payload: PlanDimensionsIn, db: Session = Depends(get_db)):
+    """Update real_width / real_height / resolution without touching the nav graph."""
+    plan = db.query(Plan).filter(Plan.id == plan_id).one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    plan.real_width = payload.real_width
+    plan.real_height = payload.real_height
+    plan.resolution = payload.resolution
+    db.commit()
+    db.refresh(plan)
+    return _build_graph_out(plan, db)
 
 
 @router.get("/plans/{plan_id}/graph", response_model=PlanGraphOut)
@@ -175,6 +190,8 @@ def save_plan_graph(plan_id: int, payload: PlanGraphIn, db: Session = Depends(ge
                     status_code=404,
                     detail=f"Object {op.object_id} not found on plan {plan_id}",
                 )
+            if op.description is not None:
+                obj.description = op.description
             obj.polygon_points = op.polygon_points
             if op.nav_node_client_id is not None:
                 db_node_id = client_id_map.get(op.nav_node_client_id)

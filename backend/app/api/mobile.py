@@ -146,6 +146,13 @@ def get_object_detail(object_id: int, db: Session = Depends(get_db)):
     building = structure.building
     campus = building.campus
     plan = obj.plan
+    image_pixel_width: float | None = None
+    image_pixel_height: float | None = None
+    if plan.real_width is not None and plan.resolution is not None:
+        image_pixel_width = plan.real_width * plan.resolution
+    if plan.real_height is not None and plan.resolution is not None:
+        image_pixel_height = plan.real_height * plan.resolution
+
     return MobileObjectDetail(
         id=obj.id,
         name=obj.name,
@@ -162,6 +169,8 @@ def get_object_detail(object_id: int, db: Session = Depends(get_db)):
         campus_name=campus.name,
         plan_id=plan.id,
         plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key),
+        image_pixel_width=image_pixel_width,
+        image_pixel_height=image_pixel_height,
         polygon_points=obj.polygon_points,
         nav_node_id=obj.nav_node_id,
     )
@@ -221,6 +230,13 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
             )
             for o in objs
         ]
+    image_pixel_width: float | None = None
+    image_pixel_height: float | None = None
+    if plan and plan.real_width is not None and plan.resolution is not None:
+        image_pixel_width = plan.real_width * plan.resolution
+    if plan and plan.real_height is not None and plan.resolution is not None:
+        image_pixel_height = plan.real_height * plan.resolution
+
     return MobileFloorPlanResponse(
         floor_id=floor.id,
         floor_name=floor.name,
@@ -228,6 +244,8 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
         plan_photo_url=effective_photo_url(plan.photo_url, plan.minio_object_key)
         if plan
         else None,
+        image_pixel_width=image_pixel_width,
+        image_pixel_height=image_pixel_height,
         objects=objects,
     )
 
@@ -247,6 +265,8 @@ def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
             RouteStep(
                 step=s.step,
                 instruction=s.instruction,
+                direction=s.direction,
+                distance_m=s.distance_m,
                 node_id=s.node_id,
                 node_type=s.node_type,
                 node_name=s.node_name,
@@ -262,6 +282,8 @@ def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
                 plan_id=seg.plan_id,
                 floor_name=seg.floor_name,
                 plan_photo_url=seg.plan_photo_url,
+                image_pixel_width=seg.image_pixel_width,
+                image_pixel_height=seg.image_pixel_height,
                 polyline=seg.polyline,
             )
             for seg in route.segments
