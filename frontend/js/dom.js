@@ -7,6 +7,8 @@ export const dom = {
   clearBuildingBtn: document.getElementById("clearBuildingBtn"),
   clearStructureBtn: document.getElementById("clearStructureBtn"),
   clearFloorBtn: document.getElementById("clearFloorBtn"),
+  cascadeDeletePanel: document.getElementById("cascadeDeletePanel"),
+  cascadeDeleteBtn: document.getElementById("cascadeDeleteBtn"),
   pathText: document.getElementById("pathText"),
   errorText: document.getElementById("errorText"),
   emptyStateText: document.getElementById("emptyStateText"),

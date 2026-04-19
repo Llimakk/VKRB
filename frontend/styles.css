@@ -18,9 +18,33 @@ body {
   background: #fff;
   border-right: 1px solid #ddd;
   padding: 16px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-content: start;
+  min-height: 100vh;
+}
+
+.cascade-delete-panel {
+  margin-top: auto;
+  align-self: flex-end;
+  text-align: right;
+  max-width: 100%;
+}
+
+.cascade-delete-label {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.btn-danger {
+  background: #c62828;
+  color: #fff;
+  border: 1px solid #b71c1c;
+}
+
+.btn-danger:hover {
+  background: #b71c1c;
 }
 
 .content {
@@ -108,7 +132,8 @@ body {
 
 .objects-card {
   max-width: 100%;
-  width: 100%;
+  width: fit-content;
+  overflow-x: auto;
 }
 
 .objects-card h3 {
@@ -198,8 +223,12 @@ button {
 }
 
 table {
-  width: 100%;
   border-collapse: collapse;
+}
+
+.objects-card table {
+  width: max-content;
+  max-width: 100%;
 }
 
 th,
@@ -259,8 +288,14 @@ td {
 
 .actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  align-items: center;
+}
+
+.actions button {
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .create-form {

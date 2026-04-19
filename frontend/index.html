@@ -34,6 +34,13 @@
           <select id="floorSelect" disabled></select>
           <button id="clearFloorBtn" type="button">✕</button>
         </div>
+
+        <div id="cascadeDeletePanel" class="cascade-delete-panel" hidden>
+          <p class="cascade-delete-label muted">
+            Удалить выбранный уровень и все объекты уровней ниже
+          </p>
+          <button type="button" id="cascadeDeleteBtn" class="btn-danger">Удалить безвозвратно</button>
+        </div>
       </aside>
 
       <section class="content">

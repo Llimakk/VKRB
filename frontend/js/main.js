@@ -32,21 +32,71 @@ function renderPath() {
   const floor = getSelectedName(state.floors, state.selected.floorId);
   if (!state.selected.campusId) {
     dom.pathText.textContent = "Выберите кампус.";
+    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.campusId && !state.selected.buildingId) {
     dom.pathText.textContent = campus;
+    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.buildingId && !state.selected.structureId) {
     dom.pathText.textContent = `${campus} / ${building}`;
+    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.structureId && !state.selected.floorId) {
     dom.pathText.textContent = `${campus} / ${building} / ${structure}`;
+    syncCascadeDeletePanel();
     return;
   }
   dom.pathText.textContent = `${campus} / ${building} / ${structure} / ${floor}`;
+  syncCascadeDeletePanel();
+}
+
+const CASCADE_WARNINGS = {
+  campus:
+    "Будут безвозвратно удалены весь выбранный кампус, все корпуса (здания), строения, этажи, планы этажей, все помещения (объекты) на планах и загруженные изображения.",
+  building:
+    "Будут безвозвратно удалены выбранный корпус, все строения и этажи в нём, планы этажей, все помещения на планах и связанные изображения.",
+  structure:
+    "Будут безвозвратно удалены выбранное строение, все этажи в нём, планы, все помещения на планах и связанные изображения.",
+  floor:
+    "Будут безвозвратно удалены выбранный этаж, план этажа, все помещения на плане и файл изображения плана.",
+};
+
+function getCascadeDeleteTarget() {
+  if (!state.selected.campusId) return null;
+  if (state.selected.floorId) {
+    return {
+      level: "floor",
+      id: state.selected.floorId,
+      name: getSelectedName(state.floors, state.selected.floorId),
+    };
+  }
+  if (state.selected.structureId) {
+    return {
+      level: "structure",
+      id: state.selected.structureId,
+      name: getSelectedName(state.structures, state.selected.structureId),
+    };
+  }
+  if (state.selected.buildingId) {
+    return {
+      level: "building",
+      id: state.selected.buildingId,
+      name: getSelectedName(state.buildings, state.selected.buildingId),
+    };
+  }
+  return {
+    level: "campus",
+    id: state.selected.campusId,
+    name: getSelectedName(state.campuses, state.selected.campusId),
+  };
+}
+
+function syncCascadeDeletePanel() {
+  dom.cascadeDeletePanel.hidden = !state.selected.campusId;
 }
 
 function clearPlanView() {
@@ -451,6 +501,80 @@ function askConfirmation({ title, message, okText = "Подтвердить", ca
   });
 }
 
+async function performCascadeDelete() {
+  const target = getCascadeDeleteTarget();
+  if (!target) return;
+
+  const step1 = await askConfirmation({
+    title: "Опасное действие",
+    message: CASCADE_WARNINGS[target.level],
+    okText: "Продолжить",
+    cancelText: "Отмена",
+  });
+  if (!step1) return;
+
+  const step2 = await askConfirmation({
+    title: "Подтвердите удаление",
+    message: `Удалить «${target.name}» без возможности восстановления?`,
+    okText: "Удалить",
+    cancelText: "Отмена",
+  });
+  if (!step2) return;
+
+  if (!dom.imageModalOverlay.hidden) closeImageModal();
+
+  if (target.level === "campus") {
+    await api.deleteCampus(target.id);
+    await loadInitialLists();
+    return;
+  }
+
+  if (target.level === "building") {
+    await api.deleteBuilding(target.id);
+    state.selected.buildingId = null;
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    fillSelect(dom.structureSelect, [], "Введите строение", true);
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    setMode("campus");
+    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
+    loadEntityImage("campus", state.selected.campusId);
+    renderPath();
+    syncRenameField();
+    return;
+  }
+
+  if (target.level === "structure") {
+    await api.deleteStructure(target.id);
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    setMode("building");
+    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
+    loadEntityImage("building", state.selected.buildingId);
+    renderPath();
+    syncRenameField();
+    return;
+  }
+
+  await api.deleteFloor(target.id);
+  state.selected.floorId = null;
+  clearPlanView();
+  state.floors = await api.getFloors(state.selected.structureId);
+  fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+  setMode("structure");
+  dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+  loadEntityImage("structure", state.selected.structureId);
+  renderPath();
+  syncRenameField();
+}
+
 function syncDownloadButton(enabled) {
   if (!dom.downloadImageBtn) return;
   dom.downloadImageBtn.disabled = !enabled;
@@ -795,6 +919,8 @@ document.addEventListener("keydown", (e) => {
   else if (!dom.imageModalOverlay.hidden) closeImageModal();
   else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
+
+dom.cascadeDeleteBtn.addEventListener("click", () => run(performCascadeDelete));
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));
 dom.buildingSelect.addEventListener("change", () => run(onBuildingChange));
