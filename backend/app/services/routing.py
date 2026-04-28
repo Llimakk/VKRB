@@ -21,12 +21,14 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Floor, NavEdge, NavNode, Object, Plan, Structure
+from app.models import Building, Floor, NavEdge, NavNode, Object, ObjectEntryNode, Plan, Structure
 from app.services.minio_service import effective_photo_url
 
 # Virtual cost assigned to a floor transition via stairs/elevator (metres equivalent)
 INTER_FLOOR_COST = 15.0
 INTER_FLOOR_TYPES = {"stairs", "elevator"}
+# horizontal cross-structure passage (same floor, adjacent building)
+PASSAGE_COST = 5.0
 
 # Douglas-Peucker epsilon in editor-canvas pixels.
 # Points that deviate less than this from the straight line are removed.
@@ -34,23 +36,25 @@ INTER_FLOOR_TYPES = {"stairs", "elevator"}
 POLYLINE_SIMPLIFY_EPSILON = 5.0
 
 # Direction values for mobile icons
-DIR_START         = "start"
-DIR_DESTINATION   = "destination"
-DIR_STRAIGHT      = "straight"
-DIR_TURN_LEFT     = "turn_left"
-DIR_TURN_RIGHT    = "turn_right"
-DIR_STAIRS_UP     = "stairs_up"
-DIR_STAIRS_DOWN   = "stairs_down"
-DIR_ELEVATOR_UP   = "elevator_up"
+DIR_START = "start"
+DIR_DESTINATION = "destination"
+DIR_STRAIGHT = "straight"
+DIR_TURN_LEFT = "turn_left"
+DIR_TURN_RIGHT = "turn_right"
+DIR_STAIRS_UP = "stairs_up"
+DIR_STAIRS_DOWN = "stairs_down"
+DIR_ELEVATOR_UP = "elevator_up"
 DIR_ELEVATOR_DOWN = "elevator_down"
-DIR_EXIT          = "exit"
-DIR_DOOR          = "door"
+DIR_EXIT = "exit"
+DIR_TOILET = "toilet"
+DIR_PASSAGE = "passage"
 
 
 @dataclass
 class _Node:
     id: int
     plan_id: int
+    floor_id: int
     x: float
     y: float
     name: Optional[str]
@@ -58,7 +62,9 @@ class _Node:
     floor_name: str
     floor_sort_order: int
     structure_name: str
-    plan_resolution: Optional[float] = None   # px/m, for pixel→metre conversion
+    building_name: str
+    # px/m, for pixel→metre conversion
+    plan_resolution: Optional[float] = None
 
 
 @dataclass
@@ -66,7 +72,8 @@ class RouteStepData:
     step: int
     instruction: str
     direction: str        # one of DIR_* constants
-    distance_m: float     # distance from this waypoint to the next step (0 for last)
+    # distance from this waypoint to the next step (0 for last)
+    distance_m: float
     node_id: int
     node_type: str
     node_name: Optional[str]
@@ -79,6 +86,7 @@ class RouteStepData:
 @dataclass
 class PlanSegmentData:
     plan_id: int
+    floor_id: int
     floor_name: str
     plan_photo_url: Optional[str]
     image_pixel_width: Optional[float]
@@ -102,21 +110,25 @@ def _load_graph(
 ) -> tuple[
     dict[int, list[tuple[int, float]]],   # adjacency
     dict[int, _Node],                      # nodes
-    dict[tuple[int, int], float],          # edge_costs: (min_id, max_id) → cost
+    # edge_costs: (min_id, max_id) → cost
+    dict[tuple[int, int], float],
 ]:
     rows = (
-        db.query(NavNode, Floor.name, Floor.sort_order, Structure.name, Plan.resolution)
+        db.query(NavNode, Floor.id, Floor.name, Floor.sort_order,
+                 Structure.name, Building.name, Plan.resolution)
         .join(Plan, NavNode.plan_id == Plan.id)
         .join(Floor, Plan.floor_id == Floor.id)
         .join(Structure, Floor.structure_id == Structure.id)
+        .join(Building, Structure.building_id == Building.id)
         .all()
     )
 
     nodes: dict[int, _Node] = {}
-    for nav_node, floor_name, floor_sort_order, structure_name, plan_resolution in rows:
+    for nav_node, floor_id, floor_name, floor_sort_order, structure_name, building_name, plan_resolution in rows:
         nodes[nav_node.id] = _Node(
             id=nav_node.id,
             plan_id=nav_node.plan_id,
+            floor_id=floor_id,
             x=nav_node.x,
             y=nav_node.y,
             name=nav_node.name,
@@ -124,6 +136,7 @@ def _load_graph(
             floor_name=floor_name,
             floor_sort_order=floor_sort_order,
             structure_name=structure_name,
+            building_name=building_name,
             plan_resolution=plan_resolution,
         )
 
@@ -139,11 +152,12 @@ def _load_graph(
                    max(edge.from_node_id, edge.to_node_id))
             edge_costs[key] = cost
 
-    # Inter-floor virtual edges
-    inter_floor: dict[tuple[str, str], list[int]] = defaultdict(list)
+    # Inter-floor virtual edges (stairs/elevator scoped to same structure)
+    inter_floor: dict[tuple[str, str, str], list[int]] = defaultdict(list)
     for nid, node in nodes.items():
         if node.node_type in INTER_FLOOR_TYPES and node.name:
-            inter_floor[(node.name, node.node_type)].append(nid)
+            inter_floor[(node.name, node.node_type,
+                         node.structure_name)].append(nid)
 
     for group in inter_floor.values():
         for i in range(len(group)):
@@ -155,32 +169,21 @@ def _load_graph(
                     key = (min(a, b), max(a, b))
                     edge_costs[key] = INTER_FLOOR_COST
 
-    # Corridor-hub shortcuts ────────────────────────────────────────────────────
-    # When two non-corridor nodes both connect to the same corridor hub, add a
-    # direct edge between them with Euclidean cost.  This eliminates V-shaped
-    # detours for rooms on opposite sides of a wide corridor.
-    hub_rooms: dict[int, list[int]] = defaultdict(list)
-    for nid, neighbors in adjacency.items():
-        if nodes[nid].node_type != "corridor":
-            for nb_id, _ in neighbors:
-                if nb_id in nodes and nodes[nb_id].node_type == "corridor":
-                    hub_rooms[nb_id].append(nid)
+    # Cross-structure passage virtual edges (scoped to same building)
+    passages: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for nid, node in nodes.items():
+        if node.node_type == "passage" and node.name:
+            passages[(node.name, node.building_name)].append(nid)
 
-    for corridor_id, room_ids in hub_rooms.items():
-        for i in range(len(room_ids)):
-            for j in range(i + 1, len(room_ids)):
-                a, b = room_ids[i], room_ids[j]
-                na, nb = nodes[a], nodes[b]
-                if na.plan_id != nb.plan_id:
-                    continue
-                px = math.hypot(nb.x - na.x, nb.y - na.y)
-                res = na.plan_resolution or 1.0
-                cost = round(px / res, 3) if res > 0 else round(px, 3)
-                key = (min(a, b), max(a, b))
-                if key not in edge_costs or edge_costs[key] > cost:
-                    adjacency[a].append((b, cost))
-                    adjacency[b].append((a, cost))
-                    edge_costs[key] = cost
+    for group in passages.values():
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                a, b = group[i], group[j]
+                if nodes[a].plan_id != nodes[b].plan_id:
+                    adjacency[a].append((b, PASSAGE_COST))
+                    adjacency[b].append((a, PASSAGE_COST))
+                    key = (min(a, b), max(a, b))
+                    edge_costs[key] = PASSAGE_COST
 
     return adjacency, nodes, edge_costs
 
@@ -189,18 +192,30 @@ def _load_graph(
 
 def _dijkstra(
     adjacency: dict[int, list[tuple[int, float]]],
-    start: int,
-    end: int,
+    starts: list[int],
+    ends: list[int],
 ) -> tuple[float, list[int]]:
-    dist: dict[int, float] = {start: 0.0}
-    prev: dict[int, Optional[int]] = {start: None}
-    pq: list[tuple[float, int]] = [(0.0, start)]
+    """
+    Multi-source, multi-destination Dijkstra.
+    All start nodes are initialised at distance 0 (virtual common source).
+    Returns the shortest (cost, path) over all (start, end) combinations.
+    """
+    dist: dict[int, float] = {}
+    prev: dict[int, Optional[int]] = {}
+    pq: list[tuple[float, int]] = []
+
+    for s in starts:
+        dist[s] = 0.0
+        prev[s] = None
+        heapq.heappush(pq, (0.0, s))
+
+    end_set = set(ends)
 
     while pq:
         cost, u = heapq.heappop(pq)
         if cost > dist.get(u, float("inf")):
             continue
-        if u == end:
+        if u in end_set:
             break
         for v, w in adjacency.get(u, []):
             new_cost = cost + w
@@ -209,16 +224,18 @@ def _dijkstra(
                 prev[v] = u
                 heapq.heappush(pq, (new_cost, v))
 
-    if end not in dist:
+    reachable = [(dist[e], e) for e in ends if e in dist]
+    if not reachable:
         return float("inf"), []
 
+    best_cost, best_end = min(reachable)
     path: list[int] = []
-    cur: Optional[int] = end
+    cur: Optional[int] = best_end
     while cur is not None:
         path.append(cur)
         cur = prev.get(cur)
     path.reverse()
-    return dist[end], path
+    return best_cost, path
 
 
 # ── Direction helpers ─────────────────────────────────────────────────────────
@@ -326,7 +343,8 @@ def _build_steps(
 
     # Pair each node with its cost to the NEXT node in path
     pwc: list[tuple[_Node, float]] = [
-        (nodes[path[i]], ecost(path[i], path[i + 1]) if i < len(path) - 1 else 0.0)
+        (nodes[path[i]], ecost(path[i], path[i + 1])
+         if i < len(path) - 1 else 0.0)
         for i in range(len(path))
     ]
 
@@ -338,7 +356,7 @@ def _build_steps(
     while i < n:
         node, cost_forward = pwc[i]
         is_first = (i == 0)
-        is_last  = (i == n - 1)
+        is_last = (i == n - 1)
         prev_node = pwc[i - 1][0] if i > 0 else None
         next_node = pwc[i + 1][0] if i < n - 1 else None
 
@@ -348,7 +366,7 @@ def _build_steps(
             direction = _look_ahead_direction(node, pwc[i + 1:])
             result.append(RouteStepData(
                 step=step_num,
-                instruction=f"Выйдите из «{name}»" if name else "Начните маршрут",
+                instruction=f"Выйдите из {name}" if name else "Начните маршрут",
                 direction=direction,
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
@@ -364,7 +382,7 @@ def _build_steps(
             name = node.name or ""
             result.append(RouteStepData(
                 step=step_num,
-                instruction=f"Войдите в «{name}»" if name else "Вы у цели",
+                instruction=f"Войдите в {name}" if name else "Вы у цели",
                 direction=DIR_DESTINATION,
                 distance_m=0.0,
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
@@ -377,7 +395,7 @@ def _build_steps(
         # ── Mid-path room → landmark hint ─────────────────────────────────────
         if node.node_type == "room":
             name = node.name or ""
-            instr = f"Пройдите через «{name}»" if name else "Продолжайте движение"
+            instr = f"Пройдите через {name}" if name else "Продолжайте движение"
             result.append(RouteStepData(
                 step=step_num,
                 instruction=instr,
@@ -391,60 +409,86 @@ def _build_steps(
             i += 1
             continue
 
-        # ── Collapse consecutive corridor nodes (same plan) ────────────────────
+        # ── Collapse consecutive corridor nodes (same plan), split at turns ──────
         if node.node_type == "corridor":
-            j = i
-            total_dist = 0.0
-            while (j < n - 1
-                   and pwc[j][0].node_type == "corridor"
-                   and pwc[j][0].plan_id == node.plan_id):
-                total_dist += pwc[j][1]
-                j += 1
-            # j points to the first non-corridor (or last node)
+            # Find the end of the corridor run on this plan
+            run_end = i
+            while (run_end < n - 1
+                   and pwc[run_end][0].node_type == "corridor"
+                   and pwc[run_end][0].plan_id == node.plan_id):
+                run_end += 1
+            # Corridor nodes are pwc[i..run_end-1]
 
-            # Turn direction: angle at entry (prev → first_corridor → first_non_corridor)
-            next_after = pwc[j][0] if j < n else None
-            if prev_node and next_after:
-                direction = _turn_direction(prev_node, node, next_after)
-            else:
-                direction = DIR_STRAIGHT
+            # Detect turn points at interior nodes: k where angle(k-1→k→k+1) > threshold
+            turn_points: list[int] = []
+            for k in range(i + 1, run_end - 1):
+                if _turn_direction(pwc[k - 1][0], pwc[k][0], pwc[k + 1][0]) != DIR_STRAIGHT:
+                    turn_points.append(k)
 
-            dist_str = f" ~{round(total_dist)}м" if total_dist >= 2 else ""
-            if direction == DIR_TURN_LEFT:
-                instr = f"Поверните налево и следуйте по коридору{dist_str}"
-            elif direction == DIR_TURN_RIGHT:
-                instr = f"Поверните направо и следуйте по коридору{dist_str}"
-            else:
-                instr = f"Следуйте прямо по коридору{dist_str}"
+            # Split into sub-segments at each turn point
+            seg_starts = [i] + turn_points
+            seg_entry_prevs = [prev_node] + [pwc[k - 1][0]
+                                             for k in turn_points]
+            seg_ends = turn_points + [run_end]
 
-            result.append(RouteStepData(
-                step=step_num,
-                instruction=instr,
-                direction=direction,
-                distance_m=round(total_dist, 1),
-                node_id=node.id, node_type="corridor", node_name=node.name,
-                plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
-            ))
-            step_num += 1
-            i = j
+            for (seg_s, seg_prev_nd), seg_e in zip(
+                zip(seg_starts, seg_entry_prevs), seg_ends
+            ):
+                seg_dist = sum(pwc[k][1] for k in range(seg_s, seg_e))
+                seg_first = pwc[seg_s][0]
+
+                # Second node in sub-segment (or exit node) for direction look-ahead
+                if seg_s + 1 < seg_e:
+                    seg_second = pwc[seg_s + 1][0]
+                elif run_end < n:
+                    seg_second = pwc[run_end][0]
+                else:
+                    seg_second = None
+
+                if seg_prev_nd and seg_second:
+                    direction = _turn_direction(
+                        seg_prev_nd, seg_first, seg_second)
+                else:
+                    direction = DIR_STRAIGHT
+
+                dist_str = f" ~{round(seg_dist)}м" if seg_dist >= 2 else ""
+                if direction == DIR_TURN_LEFT:
+                    instr = f"Поверните налево и следуйте по коридору{dist_str}"
+                elif direction == DIR_TURN_RIGHT:
+                    instr = f"Поверните направо и следуйте по коридору{dist_str}"
+                else:
+                    instr = f"Следуйте прямо по коридору{dist_str}"
+
+                result.append(RouteStepData(
+                    step=step_num,
+                    instruction=instr,
+                    direction=direction,
+                    distance_m=round(seg_dist, 1),
+                    node_id=seg_first.id, node_type="corridor", node_name=seg_first.name,
+                    plan_id=seg_first.plan_id, floor_name=seg_first.floor_name,
+                    x=seg_first.x, y=seg_first.y,
+                ))
+                step_num += 1
+
+            i = run_end
             continue
 
         # ── Stairs ────────────────────────────────────────────────────────────
         if node.node_type == "stairs":
             name = node.name or ""
             arrived_from_other_floor = _came_from_other_floor(node, prev_node)
-            leaving_to_other_floor   = next_node is not None and next_node.plan_id != node.plan_id
+            leaving_to_other_floor = next_node is not None and next_node.plan_id != node.plan_id
 
             if arrived_from_other_floor:
                 # Arrival on destination floor → exit stairwell with look-ahead direction
                 direction = _look_ahead_direction(node, pwc[i + 1:])
-                instr = f"Выйдите из лестничной клетки {name}".strip()
+                instr = f"Выйдите из лестничной клетки".strip()
             elif leaving_to_other_floor:
                 # Departure to another floor
-                direction = _vertical_direction(node, next_node, is_elevator=False)
+                direction = _vertical_direction(
+                    node, next_node, is_elevator=False)
                 verb = "Поднимитесь" if direction == DIR_STAIRS_UP else "Спуститесь"
-                instr = f"{verb} по лестнице {name} на {next_node.floor_name}".strip()
+                instr = f"{verb} по лестнице на {next_node.floor_name}".strip()
             else:
                 direction = DIR_STAIRS_UP
                 instr = f"Лестница {name}".strip()
@@ -465,15 +509,16 @@ def _build_steps(
         if node.node_type == "elevator":
             name = node.name or ""
             arrived_from_other_floor = _came_from_other_floor(node, prev_node)
-            leaving_to_other_floor   = next_node is not None and next_node.plan_id != node.plan_id
+            leaving_to_other_floor = next_node is not None and next_node.plan_id != node.plan_id
 
             if arrived_from_other_floor:
                 direction = _look_ahead_direction(node, pwc[i + 1:])
-                instr = f"Выйдите из лифта {name}".strip()
+                instr = f"Выйдите из лифта".strip()
             elif leaving_to_other_floor:
-                direction = _vertical_direction(node, next_node, is_elevator=True)
+                direction = _vertical_direction(
+                    node, next_node, is_elevator=True)
                 verb = "Поднимитесь" if direction == DIR_ELEVATOR_UP else "Спуститесь"
-                instr = f"{verb} на лифте {name} до {next_node.floor_name}".strip()
+                instr = f"{verb} на лифте на {next_node.floor_name}".strip()
             else:
                 direction = DIR_ELEVATOR_UP
                 instr = f"Лифт {name}".strip()
@@ -490,13 +535,46 @@ def _build_steps(
             i += 1
             continue
 
-        # ── Door ──────────────────────────────────────────────────────────────
-        if node.node_type == "door":
+        # ── Passage (cross-structure transition) ──────────────────────────────
+        if node.node_type == "passage":
+            name = node.name or ""
+            arrived_from_other_plan = _came_from_other_floor(node, prev_node)
+            leaving_to_other_plan = next_node is not None and next_node.plan_id != node.plan_id
+
+            if arrived_from_other_plan and leaving_to_other_plan:
+                i += 1
+                continue
+
+            if arrived_from_other_plan:
+                direction = _look_ahead_direction(node, pwc[i + 1:])
+                instr = f"Вы перешли в {node.structure_name}"
+            elif leaving_to_other_plan:
+                dest = next_node.structure_name
+                instr = f"Перейдите через переход в {dest}"
+                direction = DIR_PASSAGE
+            else:
+                direction = DIR_PASSAGE
+                instr = f"Вы перешли в {node.structure_name}"
+
+            result.append(RouteStepData(
+                step=step_num,
+                instruction=instr, direction=direction,
+                distance_m=round(cost_forward, 1),
+                node_id=node.id, node_type=node.node_type, node_name=node.name,
+                plan_id=node.plan_id, floor_name=node.floor_name,
+                x=node.x, y=node.y,
+            ))
+            step_num += 1
+            i += 1
+            continue
+
+        # ── Toilet ────────────────────────────────────────────────────────────
+        if node.node_type == "toilet":
             name = node.name or ""
             result.append(RouteStepData(
                 step=step_num,
-                instruction=f"Пройдите через дверь {name}".strip(),
-                direction=DIR_DOOR,
+                instruction=f"Туалет {name}".strip(),
+                direction=DIR_TOILET,
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
@@ -549,11 +627,11 @@ def _douglas_peucker(points: list[dict], epsilon: float) -> list[dict]:
 
     x1, y1 = points[0]["x"], points[0]["y"]
     x2, y2 = points[-1]["x"], points[-1]["y"]
-    dx, dy  = x2 - x1, y2 - y1
+    dx, dy = x2 - x1, y2 - y1
     line_len = math.hypot(dx, dy)
 
     max_dist = 0.0
-    max_idx  = 0
+    max_idx = 0
 
     if line_len < 1e-9:
         # Degenerate: start == end — pick farthest point to avoid collapsing the arc
@@ -561,7 +639,7 @@ def _douglas_peucker(points: list[dict], epsilon: float) -> list[dict]:
             d = math.hypot(points[i]["x"] - x1, points[i]["y"] - y1)
             if d > max_dist:
                 max_dist = d
-                max_idx  = i
+                max_idx = i
     else:
         for i in range(1, len(points) - 1):
             px, py = points[i]["x"], points[i]["y"]
@@ -569,11 +647,11 @@ def _douglas_peucker(points: list[dict], epsilon: float) -> list[dict]:
             dist = abs(dy * px - dx * py + x2 * y1 - y2 * x1) / line_len
             if dist > max_dist:
                 max_dist = dist
-                max_idx  = i
+                max_idx = i
 
     if max_dist > epsilon:
-        left  = _douglas_peucker(points[: max_idx + 1], epsilon)
-        right = _douglas_peucker(points[max_idx :],      epsilon)
+        left = _douglas_peucker(points[: max_idx + 1], epsilon)
+        right = _douglas_peucker(points[max_idx:],      epsilon)
         return left[:-1] + right
     else:
         return [points[0], points[-1]]
@@ -592,8 +670,10 @@ def _plan_meta(db: Session, plan_ids: set[int]) -> dict[int, _PlanMeta]:
     plans = db.query(Plan).filter(Plan.id.in_(plan_ids)).all()
     result = {}
     for p in plans:
-        w = p.real_width  * p.resolution if p.real_width  is not None and p.resolution is not None else None
-        h = p.real_height * p.resolution if p.real_height is not None and p.resolution is not None else None
+        w = p.real_width * \
+            p.resolution if p.real_width is not None and p.resolution is not None else None
+        h = p.real_height * \
+            p.resolution if p.real_height is not None and p.resolution is not None else None
         result[p.id] = _PlanMeta(
             photo_url=effective_photo_url(p.photo_url, p.minio_object_key),
             image_pixel_width=w,
@@ -612,29 +692,34 @@ def compute_route(
     """
     Raises ValueError if objects or their nav_nodes are missing, or no path exists.
     """
-    from_obj = db.query(Object).filter(Object.id == from_object_id).one_or_none()
-    to_obj   = db.query(Object).filter(Object.id == to_object_id).one_or_none()
-
-    if not from_obj:
+    if not db.query(Object).filter(Object.id == from_object_id).one_or_none():
         raise ValueError(f"Object {from_object_id} not found")
-    if not to_obj:
+    if not db.query(Object).filter(Object.id == to_object_id).one_or_none():
         raise ValueError(f"Object {to_object_id} not found")
-    if not from_obj.nav_node_id:
-        raise ValueError(f"Object {from_object_id} has no nav_node assigned")
-    if not to_obj.nav_node_id:
-        raise ValueError(f"Object {to_object_id} has no nav_node assigned")
+
+    starts = [r.nav_node_id for r in db.query(ObjectEntryNode)
+              .filter(ObjectEntryNode.object_id == from_object_id).all()]
+    ends = [r.nav_node_id for r in db.query(ObjectEntryNode)
+            .filter(ObjectEntryNode.object_id == to_object_id).all()]
+
+    if not starts:
+        raise ValueError(
+            f"Object {from_object_id} has no entry nodes assigned")
+    if not ends:
+        raise ValueError(f"Object {to_object_id} has no entry nodes assigned")
 
     adjacency, nodes, edge_costs = _load_graph(db)
 
-    start_id = from_obj.nav_node_id
-    end_id   = to_obj.nav_node_id
+    starts = [s for s in starts if s in nodes]
+    ends = [e for e in ends if e in nodes]
+    if not starts:
+        raise ValueError(
+            f"Object {from_object_id}: entry nodes not found in graph")
+    if not ends:
+        raise ValueError(
+            f"Object {to_object_id}: entry nodes not found in graph")
 
-    if start_id not in nodes:
-        raise ValueError(f"Nav node {start_id} not found in graph")
-    if end_id not in nodes:
-        raise ValueError(f"Nav node {end_id} not found in graph")
-
-    total_dist, path = _dijkstra(adjacency, start_id, end_id)
+    total_dist, path = _dijkstra(adjacency, starts, ends)
 
     if not path:
         raise ValueError("No route found between the two objects")
@@ -646,8 +731,9 @@ def compute_route(
     metas = _plan_meta(db, plan_ids)
 
     segments: list[PlanSegmentData] = []
-    cur_plan_id     = nodes[path[0]].plan_id
-    cur_floor       = nodes[path[0]].floor_name
+    cur_plan_id = nodes[path[0]].plan_id
+    cur_floor_id = nodes[path[0]].floor_id
+    cur_floor = nodes[path[0]].floor_name
     cur_seg_nodes: list[_Node] = []
 
     for nid in path:
@@ -655,20 +741,22 @@ def compute_route(
         if node.plan_id != cur_plan_id:
             meta = metas.get(cur_plan_id, _PlanMeta(None, None, None))
             segments.append(PlanSegmentData(
-                plan_id=cur_plan_id, floor_name=cur_floor,
+                plan_id=cur_plan_id, floor_id=cur_floor_id, floor_name=cur_floor,
                 plan_photo_url=meta.photo_url,
                 image_pixel_width=meta.image_pixel_width,
                 image_pixel_height=meta.image_pixel_height,
-                polyline=_simplify_polyline(cur_seg_nodes, POLYLINE_SIMPLIFY_EPSILON),
+                polyline=_simplify_polyline(
+                    cur_seg_nodes, POLYLINE_SIMPLIFY_EPSILON),
             ))
-            cur_plan_id   = node.plan_id
-            cur_floor     = node.floor_name
+            cur_plan_id = node.plan_id
+            cur_floor_id = node.floor_id
+            cur_floor = node.floor_name
             cur_seg_nodes = []
         cur_seg_nodes.append(node)
 
     meta = metas.get(cur_plan_id, _PlanMeta(None, None, None))
     segments.append(PlanSegmentData(
-        plan_id=cur_plan_id, floor_name=cur_floor,
+        plan_id=cur_plan_id, floor_id=cur_floor_id, floor_name=cur_floor,
         plan_photo_url=meta.photo_url,
         image_pixel_width=meta.image_pixel_width,
         image_pixel_height=meta.image_pixel_height,

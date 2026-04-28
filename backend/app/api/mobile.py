@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
-from app.models import Building, Campus, Floor, Object, Plan, Structure
+from app.models import Building, Campus, Floor, NavNode, Object, ObjectEntryNode, Plan, Structure
 from app.schemas.mobile import (
     MobileBuildingItem,
     MobileCampusItem,
@@ -82,6 +82,7 @@ def get_tree(db: Session = Depends(get_db)):
 def search_objects(
     q: Optional[str] = None,
     type_id: Optional[int] = None,
+    node_type: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(Object).options(
@@ -96,6 +97,14 @@ def search_objects(
         query = query.filter(Object.name.ilike(f"%{q}%"))
     if type_id is not None:
         query = query.filter(Object.object_type_id == type_id)
+    if node_type is not None:
+        query = (
+            query
+            .join(ObjectEntryNode, ObjectEntryNode.object_id == Object.id)
+            .join(NavNode, NavNode.id == ObjectEntryNode.nav_node_id)
+            .filter(NavNode.node_type == node_type)
+            .distinct()
+        )
     objects = query.order_by(Object.name).limit(100).all()
 
     results = []
@@ -153,6 +162,10 @@ def get_object_detail(object_id: int, db: Session = Depends(get_db)):
     if plan.real_height is not None and plan.resolution is not None:
         image_pixel_height = plan.real_height * plan.resolution
 
+    entry_node_ids = [
+        r.nav_node_id for r in
+        db.query(ObjectEntryNode).filter(ObjectEntryNode.object_id == obj.id).all()
+    ]
     return MobileObjectDetail(
         id=obj.id,
         name=obj.name,
@@ -172,7 +185,7 @@ def get_object_detail(object_id: int, db: Session = Depends(get_db)):
         image_pixel_width=image_pixel_width,
         image_pixel_height=image_pixel_height,
         polygon_points=obj.polygon_points,
-        nav_node_id=obj.nav_node_id,
+        nav_node_ids=entry_node_ids,
     )
 
 
@@ -219,6 +232,20 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
             .order_by(Object.name)
             .all()
         )
+        obj_ids = [o.id for o in objs]
+        entry_rows = (
+            db.query(ObjectEntryNode.object_id, ObjectEntryNode.nav_node_id, NavNode.node_type)
+            .join(NavNode, NavNode.id == ObjectEntryNode.nav_node_id)
+            .filter(ObjectEntryNode.object_id.in_(obj_ids))
+            .all()
+        ) if obj_ids else []
+        entry_map: dict[int, list[int]] = {}
+        type_map: dict[int, str] = {}
+        for obj_id, nav_node_id, node_type in entry_rows:
+            entry_map.setdefault(obj_id, []).append(nav_node_id)
+            if obj_id not in type_map:
+                type_map[obj_id] = node_type
+
         objects = [
             MobileObjectOnPlan(
                 id=o.id,
@@ -226,7 +253,8 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
                 description=o.description,
                 object_type=MobileObjectTypeShort(id=o.object_type.id, name=o.object_type.name),
                 polygon_points=o.polygon_points,
-                nav_node_id=o.nav_node_id,
+                nav_node_ids=entry_map.get(o.id, []),
+                entry_node_type=type_map.get(o.id),
             )
             for o in objs
         ]
@@ -280,6 +308,7 @@ def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
         segments=[
             PlanSegment(
                 plan_id=seg.plan_id,
+                floor_id=seg.floor_id,
                 floor_name=seg.floor_name,
                 plan_photo_url=seg.plan_photo_url,
                 image_pixel_width=seg.image_pixel_width,

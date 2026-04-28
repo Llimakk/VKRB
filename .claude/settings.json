@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:8000/mobile/route -H 'Content-Type: application/json' -d '{\"from_object_id\": 7, \"to_object_id\": 21}')",
+      "Bash(python3 -c ':*)",
+      "Bash(curl -s \"http://localhost:8000/mobile/objects/search?q=\")",
+      "Bash(python3 -c \"import sys,json; objs=json.load\\(sys.stdin\\); [print\\(o['id'], o['name'], '|', o['floor_name'], '|', o['building_name']\\) for o in objs[:10]]\")",
+      "Bash(curl -s \"http://localhost:8000/mobile/objects/search?q=900.1\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:8000/mobile/objects/search?q=906.3\")",
+      "Bash(curl -s -X POST http://localhost:8000/mobile/route -H 'Content-Type: application/json' -d '{\"from_object_id\": 9, \"to_object_id\": 16}')",
+      "Bash(python3 -c ' *)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(npm run *)",
+      "Bash(curl -s \"http://localhost:8000/mobile/objects/search?q=436\")",
+      "Bash(python3 -c \"import json,sys; [print\\(o['id'], o['name']\\) for o in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"http://localhost:8000/mobile/objects/search?q=433\")",
+      "Bash(curl -s -X POST http://localhost:8000/mobile/route -H 'Content-Type: application/json' -d '{\"from_object_id\": 84, \"to_object_id\": 64}')",
+      "Bash(curl -s -X POST \"http://localhost:8000/mobile/route\" -H \"Content-Type: application/json\" -d '{\"from_object_id\": 84, \"to_object_id\": 64}')",
+      "Read(//Users/resxton/Desktop/ВКР/**)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:8000/mobile/floors/4/plan)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['objects'][0], indent=2\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:8000/mobile/route -H 'Content-Type: application/json' -d '{\"from_object_id\": 57, \"to_object_id\": 85}')",
+      "Bash(curl -s -X POST http://localhost:8000/mobile/route -H 'Content-Type: application/json' -d '{\"from_object_id\": 23, \"to_object_id\": 84}')"
+    ],
+    "additionalDirectories": [
+      "/Users/resxton/Desktop/ВКР/NavigatorPrototype/NavigatorPrototype/Data/Models",
+      "/Users/resxton/Desktop/ВКР/NavigatorPrototype/NavigatorPrototype/Core/Components",
+      "/Users/resxton/Desktop/ВКР/NavigatorPrototype/NavigatorPrototype/Features/Plans",
+      "/Users/resxton/Desktop/ВКР/NavigatorPrototype/NavigatorPrototype/Features/Navigator"
+    ]
+  }
+}

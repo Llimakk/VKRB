@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/resxton/Desktop/ВКР/VKRB -maxdepth 3 -type f -name package.json -o -name requirements.txt -o -name *.py -o -name README*)",
+      "Bash(find /Users/resxton/Desktop/ВКР/VKRB -not -path */.git/* -not -path */node_modules/*)",
+      "Bash(git*)",
+      "Bash(docker exec:*)",
+      "Bash(python3 -c ' *)",
+      "Read(//dev/**)",
+      "Bash(python3 -m py_compile backend/app/services/routing.py)",
+      "Bash(python3 -m py_compile backend/app/schemas/mobile.py)",
+      "Bash(python3 -m py_compile backend/app/schemas/graph.py)",
+      "Bash(python3 -m py_compile backend/app/api/admin/graph.py)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm install *)"
+    ]
+  }
+}

@@ -8,6 +8,7 @@ from .models import (  # noqa: F401
     Object,
     NavNode,
     NavEdge,
+    ObjectEntryNode,
     User,
 )
 

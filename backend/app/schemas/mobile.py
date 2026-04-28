@@ -44,7 +44,8 @@ class MobileObjectOnPlan(BaseModel):
     description: Optional[str] = None
     object_type: MobileObjectTypeShort
     polygon_points: Optional[list[dict]] = None
-    nav_node_id: Optional[int] = None
+    nav_node_ids: list[int] = []
+    entry_node_type: Optional[str] = None
 
 
 class MobileObjectSearchResult(BaseModel):
@@ -82,7 +83,7 @@ class MobileObjectDetail(BaseModel):
     image_pixel_width: Optional[float] = None
     image_pixel_height: Optional[float] = None
     polygon_points: Optional[list[dict]] = None
-    nav_node_id: Optional[int] = None
+    nav_node_ids: list[int] = []
 
 
 class MobileFloorWithPlan(BaseModel):
@@ -129,6 +130,7 @@ class RouteStep(BaseModel):
 
 class PlanSegment(BaseModel):
     plan_id: int
+    floor_id: int
     floor_name: str
     plan_photo_url: Optional[str] = None
     image_pixel_width: Optional[float] = None

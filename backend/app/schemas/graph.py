@@ -37,8 +37,8 @@ class ObjectPolygonIn(BaseModel):
     description: Optional[str] = None
     # Array of {"x": float, "y": float} dicts; null clears the geometry.
     polygon_points: Optional[list[dict[str, float]]] = None
-    # client_id of the nav_node that serves as the entry point for routing
-    nav_node_client_id: Optional[str] = None
+    # client_ids of nav_nodes that serve as entry points for routing (one per physical entrance)
+    nav_node_client_ids: list[str] = []
 
     @field_validator("polygon_points")
     @classmethod
@@ -97,7 +97,7 @@ class ObjectWithPolygonOut(BaseModel):
     object_type_id: int
     object_type_name: str
     polygon_points: Optional[list[dict[str, float]]] = None
-    nav_node_id: Optional[int] = None  # entry point for routing
+    nav_node_ids: list[int] = []  # entry points for routing
 
 
 class PlanGraphOut(BaseModel):
@@ -113,3 +113,38 @@ class PlanGraphOut(BaseModel):
     nav_nodes: list[NavNodeOut]
     nav_edges: list[NavEdgeOut]
     objects: list[ObjectWithPolygonOut]
+
+
+# ── Cross-floor edges ─────────────────────────────────────────────────────────
+
+class CrossFloorNodeInfo(BaseModel):
+    node_id: int
+    node_name: Optional[str] = None
+    node_type: str
+    plan_id: int
+    floor_id: int
+    floor_name: str
+    x: float
+    y: float
+
+
+class CrossFloorEdgeOut(BaseModel):
+    id: int
+    cost: float
+    from_node: CrossFloorNodeInfo
+    to_node: CrossFloorNodeInfo
+    is_virtual: bool = False
+
+
+class CrossFloorEdgeIn(BaseModel):
+    from_node_id: int
+    to_node_id: int
+    distance: float = 15.0  # physical metres equivalent for one floor transition
+    weight: float = 1.0     # routing preference: <1 = preferred, >1 = penalised
+
+
+class PlanSummary(BaseModel):
+    plan_id: int
+    floor_id: int
+    floor_name: str
+    transition_nodes: list[NavNodeOut]  # stairs/elevator/passage nodes

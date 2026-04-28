@@ -29,7 +29,8 @@ Desktop.ini
 
 Планы помещений/
 
-# Frontend build artifacts
+# Frontend
 frontend/dist/
+frontend/node_modules/
 
 backend/bd/

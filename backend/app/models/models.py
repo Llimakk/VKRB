@@ -127,6 +127,20 @@ class Object(Base):
     )
 
 
+class ObjectEntryNode(Base):
+    """Many-to-many: one Object can have multiple nav-node entry points."""
+
+    __tablename__ = "object_entry_node"
+
+    id:          Mapped[int] = mapped_column(primary_key=True)
+    object_id:   Mapped[int] = mapped_column(ForeignKey("object.id",   ondelete="CASCADE"), nullable=False)
+    nav_node_id: Mapped[int] = mapped_column(ForeignKey("nav_node.id", ondelete="CASCADE"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("object_id", "nav_node_id", name="uq_object_entry_node"),
+    )
+
+
 class NavNode(Base):
     """Navigation graph node — a point on the floor plan used for routing."""
 
