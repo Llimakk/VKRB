@@ -65,6 +65,8 @@ class _Node:
     building_name: str
     # px/m, for pixel→metre conversion
     plan_resolution: Optional[float] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 @dataclass
@@ -81,6 +83,8 @@ class RouteStepData:
     floor_name: str
     x: float
     y: float
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 @dataclass
@@ -138,6 +142,8 @@ def _load_graph(
             structure_name=structure_name,
             building_name=building_name,
             plan_resolution=plan_resolution,
+            lat=nav_node.lat,
+            lon=nav_node.lon,
         )
 
     adjacency: dict[int, list[tuple[int, float]]] = {nid: [] for nid in nodes}
@@ -371,7 +377,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -387,7 +393,7 @@ def _build_steps(
                 distance_m=0.0,
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             i += 1
             continue
@@ -403,7 +409,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -466,7 +472,7 @@ def _build_steps(
                     distance_m=round(seg_dist, 1),
                     node_id=seg_first.id, node_type="corridor", node_name=seg_first.name,
                     plan_id=seg_first.plan_id, floor_name=seg_first.floor_name,
-                    x=seg_first.x, y=seg_first.y,
+                    x=seg_first.x, y=seg_first.y, lat=seg_first.lat, lon=seg_first.lon,
                 ))
                 step_num += 1
 
@@ -499,7 +505,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -529,7 +535,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -562,7 +568,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -578,7 +584,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1
@@ -594,7 +600,7 @@ def _build_steps(
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
                 plan_id=node.plan_id, floor_name=node.floor_name,
-                x=node.x, y=node.y,
+                x=node.x, y=node.y, lat=node.lat, lon=node.lon,
             ))
             step_num += 1
             i += 1

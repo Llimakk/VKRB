@@ -42,6 +42,7 @@ interface EditorStore extends EditorState {
   movePoint: (id: string, coords: { x: number; y: number }) => void;
   removePoint: (id: string) => void;
   renamePoint: (id: string, name: string) => void;
+  updateNode: (id: string, updates: Partial<Pick<Point, 'name' | 'lat' | 'lon'>>) => void;
 
   // Connections
   addConnection: (from_id: string, to_id: string, weight?: number) => void;
@@ -173,6 +174,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   renamePoint: (id, name) => {
     const { points } = get();
     set({ points: points.map(p => p.id === id ? { ...p, name } : p) });
+    get().saveHistory();
+  },
+
+  updateNode: (id, updates) => {
+    const { points } = get();
+    set({ points: points.map(p => p.id === id ? { ...p, ...updates } : p) });
     get().saveHistory();
   },
 
@@ -382,6 +389,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       y: n.y,
       name: n.name ?? undefined,
       node_type: (n.node_type as NodeType) ?? 'room',
+      lat: n.lat ?? undefined,
+      lon: n.lon ?? undefined,
     }));
 
     const connections: Connection[] = data.nav_edges.map(e => ({
@@ -425,6 +434,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       y: p.y,
       name: p.name ?? null,
       node_type: p.node_type,
+      lat: p.lat ?? null,
+      lon: p.lon ?? null,
     }));
 
     const nav_edges = s.connections.map(c => ({

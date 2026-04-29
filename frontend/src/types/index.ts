@@ -8,6 +8,8 @@ export interface Point {
   y: number;
   name?: string;
   node_type: NodeType;
+  lat?: number;
+  lon?: number;
 }
 
 export interface Connection {
@@ -69,6 +71,8 @@ export interface PlanGraphData {
     y: number;
     name: string | null;
     node_type: string;
+    lat?: number | null;
+    lon?: number | null;
   }>;
   nav_edges: Array<{
     id: number;
@@ -92,6 +96,8 @@ export interface SavePayload {
     y: number;
     name: string | null;
     node_type: string;
+    lat?: number | null;
+    lon?: number | null;
   }>;
   nav_edges: Array<{
     from_client_id: string;

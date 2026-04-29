@@ -20,6 +20,8 @@ class NavNodeIn(BaseModel):
     y: float
     name: Optional[str] = None
     node_type: str = "room"  # room | stairs | elevator | exit | corridor
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 class NavEdgeIn(BaseModel):
@@ -78,6 +80,8 @@ class NavNodeOut(BaseModel):
     y: float
     name: Optional[str] = None
     node_type: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 class NavEdgeOut(BaseModel):

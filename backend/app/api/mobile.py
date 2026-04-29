@@ -302,6 +302,8 @@ def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
                 floor_name=s.floor_name,
                 x=s.x,
                 y=s.y,
+                lat=s.lat,
+                lon=s.lon,
             )
             for s in route.steps
         ],

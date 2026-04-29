@@ -153,6 +153,8 @@ class NavNode(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Тип точки: room | stairs | elevator | exit | corridor | door
     node_type: Mapped[str] = mapped_column(String(50), nullable=False, default="room")
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     plan: Mapped["Plan"] = relationship(back_populates="nav_nodes")
     edges_from: Mapped[list["NavEdge"]] = relationship(

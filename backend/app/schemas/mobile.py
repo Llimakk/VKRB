@@ -126,6 +126,8 @@ class RouteStep(BaseModel):
     floor_name: str
     x: float
     y: float
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 class PlanSegment(BaseModel):

@@ -6,7 +6,11 @@ interface Structure { id: number; name: string; floors: Floor[]; }
 interface Building  { id: number; name: string; structures: Structure[]; }
 interface Campus    { id: number; name: string; buildings: Building[]; }
 
-const PRESELECT_FLOOR = Number(new URLSearchParams(window.location.search).get('floor_id')) || null;
+const _p = new URLSearchParams(window.location.search);
+const PRESELECT_CAMPUS    = Number(_p.get('campus_id'))    || null;
+const PRESELECT_BUILDING  = Number(_p.get('building_id'))  || null;
+const PRESELECT_STRUCTURE = Number(_p.get('structure_id')) || null;
+const PRESELECT_FLOOR     = Number(_p.get('floor_id'))     || null;
 
 // ── inline "add" row ──────────────────────────────────────────────────
 function AddRow({
@@ -109,6 +113,8 @@ export const LandingPage: React.FC = () => {
         setTree(typed);
         setLoading(false);
         const fid = preselect ?? PRESELECT_FLOOR;
+
+        // Preselect by floor_id (highest priority)
         if (fid) {
           for (const campus of typed) {
             for (const building of campus.buildings) {
@@ -125,6 +131,41 @@ export const LandingPage: React.FC = () => {
               }
             }
           }
+        }
+
+        // Preselect by structure_id
+        if (PRESELECT_STRUCTURE) {
+          for (const campus of typed) {
+            for (const building of campus.buildings) {
+              for (const structure of building.structures) {
+                if (structure.id === PRESELECT_STRUCTURE) {
+                  setCampusId(campus.id);
+                  setBuildingId(building.id);
+                  setStructureId(structure.id);
+                  return;
+                }
+              }
+            }
+          }
+        }
+
+        // Preselect by building_id
+        if (PRESELECT_BUILDING) {
+          for (const campus of typed) {
+            for (const building of campus.buildings) {
+              if (building.id === PRESELECT_BUILDING) {
+                setCampusId(campus.id);
+                setBuildingId(building.id);
+                return;
+              }
+            }
+          }
+        }
+
+        // Preselect by campus_id
+        if (PRESELECT_CAMPUS) {
+          const campus = typed.find(c => c.id === PRESELECT_CAMPUS);
+          if (campus) setCampusId(campus.id);
         }
       })
       .catch(e => { setError((e as Error).message); setLoading(false); });

@@ -67,7 +67,14 @@ function NavNode({
   }
 }
 
-export const SVGCanvas: React.FC = () => {
+import { RouteOverlay } from './RoutePreviewPanel';
+
+interface SVGCanvasProps {
+  routeOverlay?: RouteOverlay | null;
+  onNodeEdit?: (point: Point) => void;
+}
+
+export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const store = useEditorStore();
   const {
@@ -260,9 +267,8 @@ export const SVGCanvas: React.FC = () => {
       return;
     }
     if (mode === 'edit') {
-      const current = point.name ?? '';
-      const result = prompt('Название точки:', current);
-      if (result !== null) renamePoint(point.id, result);
+      onNodeEdit?.(point);
+      return;
     } else if (mode === 'delete') {
       removePoint(point.id);
     } else if (mode === 'connect') {
@@ -592,6 +598,35 @@ export const SVGCanvas: React.FC = () => {
           cx={previewPoint.x} cy={previewPoint.y}
           r={4} fill="#16A34A" opacity="0.6" pointerEvents="none"
         />
+      )}
+
+      {/* Route preview overlay */}
+      {routeOverlay && routeOverlay.polyline.length >= 2 && (
+        <g pointerEvents="none">
+          {/* Full route line */}
+          <polyline
+            points={routeOverlay.polyline.map(p => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="#EF4444"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.8}
+          />
+          {/* Step waypoint markers */}
+          {routeOverlay.stepMarkers.map((marker, i) => (
+            <g key={`step-${i}`}>
+              <circle
+                cx={marker.x} cy={marker.y} r={5}
+                fill="#fff" stroke="#EF4444" strokeWidth={2}
+              />
+              <circle
+                cx={marker.x} cy={marker.y} r={7}
+                fill="none" stroke="#EF4444" strokeWidth={1} opacity={0.4}
+              />
+            </g>
+          ))}
+        </g>
       )}
     </svg>
   );

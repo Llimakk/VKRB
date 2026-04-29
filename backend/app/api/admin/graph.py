@@ -76,7 +76,7 @@ def _build_graph_out(plan: Plan, db: Session) -> PlanGraphOut:
         editor_settings=plan.editor_settings,
         image_url=effective_photo_url(plan.photo_url, plan.minio_object_key),
         nav_nodes=[
-            NavNodeOut(id=n.id, x=n.x, y=n.y, name=n.name, node_type=n.node_type)
+            NavNodeOut(id=n.id, x=n.x, y=n.y, name=n.name, node_type=n.node_type, lat=n.lat, lon=n.lon)
             for n in nodes
         ],
         nav_edges=[
@@ -327,6 +327,8 @@ def save_plan_graph(plan_id: int, payload: PlanGraphIn, db: Session = Depends(ge
             y=node_in.y,
             name=node_in.name,
             node_type=node_in.node_type,
+            lat=node_in.lat,
+            lon=node_in.lon,
         )
         db.add(node)
         db.flush()

@@ -218,3 +218,45 @@ export async function uploadPlanImage(
     body: form,
   });
 }
+
+// ── Route preview (no auth required) ─────────────────────────────────────────
+
+export interface PreviewObject {
+  id: number;
+  name: string;
+  floor_name: string;
+  floor_id: number;
+  building_name: string;
+}
+
+export interface RoutePreviewResponse {
+  total_distance: number;
+  segments: Array<{
+    plan_id: number;
+    floor_name: string;
+    polyline: Array<{ x: number; y: number }>;
+  }>;
+  steps: Array<{
+    step: number;
+    instruction: string;
+    plan_id: number;
+    floor_name: string;
+    x: number;
+    y: number;
+  }>;
+}
+
+export async function searchObjectsPreview(q: string): Promise<PreviewObject[]> {
+  return request<PreviewObject[]>(`/mobile/objects/search?q=${encodeURIComponent(q)}`);
+}
+
+export async function buildRoutePreview(
+  fromObjectId: number,
+  toObjectId: number,
+): Promise<RoutePreviewResponse> {
+  return request<RoutePreviewResponse>('/mobile/route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_object_id: fromObjectId, to_object_id: toObjectId }),
+  });
+}
