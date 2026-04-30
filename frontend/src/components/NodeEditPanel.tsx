@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Point } from '../types';
 import { useEditorStore } from '../store/editorStore';
 
@@ -9,6 +9,7 @@ interface Props {
 
 export function NodeEditPanel({ point, onClose }: Props) {
   const { updateNode } = useEditorStore();
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(point.name ?? '');
   const [lat, setLat]   = useState(point.lat != null ? String(point.lat) : '');
@@ -19,6 +20,10 @@ export function NodeEditPanel({ point, onClose }: Props) {
     setLat(point.lat != null ? String(point.lat) : '');
     setLon(point.lon != null ? String(point.lon) : '');
   }, [point.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    nameRef.current?.focus({ preventScroll: true });
+  }, [point.id]);
 
   const save = () => {
     const parsedLat = lat.trim() !== '' ? parseFloat(lat) : undefined;
@@ -35,7 +40,10 @@ export function NodeEditPanel({ point, onClose }: Props) {
 
   return (
     <div style={{
-      position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+      position: 'absolute',
+      left: point.x + 16,
+      top: point.y - 8,
+      transform: 'translateY(-50%)',
       zIndex: 500, background: '#fff', border: '1px solid #E5E7EB',
       borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.14)',
       padding: 14, display: 'flex', flexDirection: 'column', gap: 10,
@@ -51,7 +59,7 @@ export function NodeEditPanel({ point, onClose }: Props) {
       <div>
         <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 3 }}>Название</div>
         <input
-          autoFocus
+          ref={nameRef}
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }}

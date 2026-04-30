@@ -191,6 +191,27 @@ def _load_graph(
                     key = (min(a, b), max(a, b))
                     edge_costs[key] = PASSAGE_COST
 
+    # Cross-building outdoor edges: connect exit nodes across different structures
+    # using GPS distance as edge cost
+    exit_nodes = [n for n in nodes.values()
+                  if n.node_type == "exit" and n.lat is not None and n.lon is not None]
+    for i in range(len(exit_nodes)):
+        for j in range(i + 1, len(exit_nodes)):
+            a, b = exit_nodes[i], exit_nodes[j]
+            if a.plan_id == b.plan_id:
+                continue
+            # Haversine distance in metres
+            lat1, lon1 = math.radians(a.lat), math.radians(a.lon)
+            lat2, lon2 = math.radians(b.lat), math.radians(b.lon)
+            dlat, dlon = lat2 - lat1, lon2 - lon1
+            ha = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            gps_dist = 6_371_000 * 2 * math.asin(math.sqrt(ha))
+            cost = gps_dist
+            adjacency[a.id].append((b.id, cost))
+            adjacency[b.id].append((a.id, cost))
+            key = (min(a.id, b.id), max(a.id, b.id))
+            edge_costs[key] = cost
+
     return adjacency, nodes, edge_costs
 
 

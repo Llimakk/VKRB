@@ -117,12 +117,14 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   } = store;
 
   const CLOSE_SNAP_RADIUS = 12;
+  const DRAG_THRESHOLD = 4; // px — minimum movement to treat as drag, not click
 
   // Edit mode drag state — nav-nodes
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // Edit mode drag state — polygon vertices
   const [draggingVertex, setDraggingVertex] = useState<{ polyIdx: number; vtxIdx: number } | null>(null);
   const isDragging = useRef(false);
+  const dragOrigin = useRef<{ x: number; y: number } | null>(null);
 
   // Measure mode: first click anchor
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
@@ -218,13 +220,19 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     }
 
     if (draggingId !== null && mode === 'edit') {
-      isDragging.current = true;
-      movePoint(draggingId, { x, y });
+      const origin = dragOrigin.current;
+      if (origin && Math.hypot(x - origin.x, y - origin.y) >= DRAG_THRESHOLD) {
+        isDragging.current = true;
+        movePoint(draggingId, { x, y });
+      }
     }
 
     if (draggingVertex !== null && mode === 'edit') {
-      isDragging.current = true;
-      movePolygonVertex(draggingVertex.polyIdx, draggingVertex.vtxIdx, { x, y });
+      const origin = dragOrigin.current;
+      if (origin && Math.hypot(x - origin.x, y - origin.y) >= DRAG_THRESHOLD) {
+        isDragging.current = true;
+        movePolygonVertex(draggingVertex.polyIdx, draggingVertex.vtxIdx, { x, y });
+      }
     }
 
     if (mode === 'polygon' && polygonPoints.length >= 3) {
@@ -250,8 +258,8 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   const handlePointMouseDown = (e: React.MouseEvent, id: string) => {
     if (mode !== 'edit') return;
     e.stopPropagation();
-    e.preventDefault();
     isDragging.current = false;
+    dragOrigin.current = getSVGCoords(e);
     setDraggingId(id);
   };
 
