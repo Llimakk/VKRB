@@ -15,6 +15,13 @@ module.exports = {
     historyApiFallback: true,
     compress: true,
     open: true,
+    proxy: [
+      {
+        context: ['/admin', '/mobile', '/auth', '/health'],
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    ],
     client: {
       overlay: {
         errors: true,
