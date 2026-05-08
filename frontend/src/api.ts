@@ -36,10 +36,10 @@ export async function savePlanGraph(planId: number, payload: SavePayload): Promi
 }
 
 // GET /admin/plans/tree
-interface TreeFloor    { id: number; name: string; }
-interface TreeStructure { id: number; name: string; floors: TreeFloor[]; }
-interface TreeBuilding  { id: number; name: string; structures: TreeStructure[]; }
-interface TreeCampus    { id: number; name: string; buildings: TreeBuilding[]; }
+export interface TreeFloor     { id: number; name: string; sort_order?: number; }
+export interface TreeStructure { id: number; name: string; floors: TreeFloor[]; }
+export interface TreeBuilding  { id: number; name: string; structures: TreeStructure[]; }
+export interface TreeCampus    { id: number; name: string; buildings: TreeBuilding[]; }
 
 export async function createCampus(name: string): Promise<{ id: number; name: string }> {
   return request('/admin/campuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });

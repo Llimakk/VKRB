@@ -140,8 +140,6 @@ export interface EditorState {
   autoConnectCorridor: boolean;          // auto-connect new corridor node to the previous one
   lastCorridorNodeId: string | null;     // id of the last placed corridor node (for auto-connect chain)
 
-  // Zoom
-
   mode: EditorMode;
   settings: EditorSettings;
   history: string[];

@@ -23,14 +23,15 @@ export function suggestNodeName(
       // Name comes from the linked object; empty until polygon is bound
       return linkedObjectName ?? '';
     case 'corridor':
-      if (sameType.length === 0) return `К${floorNum}`;
-      return `К${floorNum}-${LETTERS[sameType.length - 1] ?? sameType.length}`;
+      return `К-${sameType.length + 1}`;
     case 'stairs':
       return `Лест-${LETTERS[sameType.length] ?? sameType.length + 1}`;
     case 'elevator':
       return `Лифт-${sameType.length + 1}`;
-    case 'door':
-      return `Д-${LETTERS[sameType.length] ?? sameType.length + 1}`;
+    case 'toilet':
+      return `Туалет-${sameType.length + 1}`;
+    case 'passage':
+      return linkedObjectName ?? `Проход-${sameType.length + 1}`;
     case 'exit':
       return `Выход-${LETTERS[sameType.length] ?? sameType.length + 1}`;
   }

@@ -5,6 +5,7 @@ import {
   RoutePreviewResponse,
   searchObjectsPreview,
 } from '../api';
+import { HEADER_HEIGHT } from '../constants';
 
 export interface RouteOverlay {
   polyline: Array<{ x: number; y: number }>;
@@ -147,7 +148,7 @@ export function RoutePreviewPanel({ currentPlanId, onRouteChange, onClose }: Pro
 
   return (
     <div style={{
-      position: 'absolute', top: 56, right: 260, zIndex: 500,
+      position: 'absolute', top: HEADER_HEIGHT + 8, right: 260, zIndex: 500,
       width: 280, background: '#fff', borderRadius: 10,
       border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
       padding: 14, display: 'flex', flexDirection: 'column', gap: 10,

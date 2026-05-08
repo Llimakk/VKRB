@@ -5,6 +5,7 @@ import {
   NodeType, PendingPolygon,
 } from '../types';
 import { getObjectTypes, createObjectType, createObject } from '../api';
+import { CANVAS_DEFAULTS, AUTO_CONNECT_NEAREST } from '../constants';
 
 const DEFAULT_SETTINGS: EditorSettings = {
   pointRadius: 6,
@@ -138,9 +139,9 @@ const createInitialState = (): EditorState => ({
   history: [],
   historyIndex: -1,
   image: null,
-  realWidth: 55,
-  realHeight: 26,
-  resolution: 30,
+  realWidth:  CANVAS_DEFAULTS.REAL_WIDTH,
+  realHeight: CANVAS_DEFAULTS.REAL_HEIGHT,
+  resolution: CANVAS_DEFAULTS.RESOLUTION,
 });
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -329,7 +330,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       const nearest = corridors
         .map(c => ({ id: c.id, dist: Math.hypot(c.x - room.x, c.y - room.y) }))
         .sort((a, b) => a.dist - b.dist)
-        .slice(0, 2);
+        .slice(0, AUTO_CONNECT_NEAREST);
       for (const { id: cid } of nearest) {
         const exists = updated.some(
           c => (c.from_id === room.id && c.to_id === cid) ||

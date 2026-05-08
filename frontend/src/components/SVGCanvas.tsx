@@ -1,73 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEditorStore } from '../store/editorStore';
-import { Point, NodeType } from '../types';
+import { Point } from '../types';
 import { suggestNodeName } from '../utils';
-
-// Visual style per node_type
-const NODE_TYPE_COLOR: Record<NodeType, string> = {
-  room:     '#007AFF',
-  toilet:   '#06B6D4',
-  stairs:   '#AF52DE',
-  elevator: '#34C759',
-  exit:     '#FF3B30',
-  corridor: '#5AC8FA',
-  passage:  '#F59E0B',
-};
-
-// Render the correct shape for a nav-node (called inside <svg>)
-function NavNode({
-  point,
-  r,
-  fill,
-  stroke,
-  cursor,
-  onClick,
-  onMouseDown,
-}: {
-  point: Point;
-  r: number;
-  fill: string;
-  stroke: string;
-  cursor: string;
-  onClick: (e: React.MouseEvent) => void;
-  onMouseDown: (e: React.MouseEvent) => void;
-}) {
-  const { x, y } = point;
-  const props = { fill, stroke, strokeWidth: 1.5, cursor, onClick, onMouseDown };
-
-  switch (point.node_type) {
-    case 'elevator': {
-      const s = r * 1.6;
-      return <rect x={x - s / 2} y={y - s / 2} width={s} height={s} rx={2} {...props} />;
-    }
-    case 'stairs': {
-      // Upward-pointing triangle
-      const pts = `${x},${y - r * 1.4} ${x - r * 1.2},${y + r * 0.9} ${x + r * 1.2},${y + r * 0.9}`;
-      return <polygon points={pts} {...props} />;
-    }
-    case 'toilet': {
-      // Cross / plus shape
-      const a = r * 0.45, b = r * 1.3;
-      const pts = `${x-a},${y-b} ${x+a},${y-b} ${x+a},${y-a} ${x+b},${y-a} ${x+b},${y+a} ${x+a},${y+a} ${x+a},${y+b} ${x-a},${y+b} ${x-a},${y+a} ${x-b},${y+a} ${x-b},${y-a} ${x-a},${y-a}`;
-      return <polygon points={pts} {...props} />;
-    }
-    case 'corridor': {
-      return <circle cx={x} cy={y} r={r * 0.65} {...props} />;
-    }
-    case 'passage': {
-      // Hexagon — visually distinct from stairs/elevator
-      const pts = Array.from({ length: 6 }, (_, i) => {
-        const a = (Math.PI / 3) * i - Math.PI / 6;
-        return `${x + r * 1.2 * Math.cos(a)},${y + r * 1.2 * Math.sin(a)}`;
-      }).join(' ');
-      return <polygon points={pts} {...props} />;
-    }
-    default:
-      return <circle cx={x} cy={y} r={r} {...props} />;
-  }
-}
-
 import { RouteOverlay } from './RoutePreviewPanel';
+import { NavNode } from './NavNode';
+import { CANVAS_COLORS, NODE_TYPE_COLOR, NODE_RING_OFFSET, LABEL_FONT_SIZE } from '../constants';
 
 interface SVGCanvasProps {
   routeOverlay?: RouteOverlay | null;
@@ -99,8 +36,6 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     finishPolygon,
     removePoint,
     removePolygon,
-    renamePoint,
-    renamePolygon,
     addConnection,
     removeConnection,
     movePoint,
@@ -169,7 +104,8 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     if (mode === 'create') {
       const suggested = suggestNodeName(nodeTypeToCreate, points, floorName);
       let name = suggested;
-      if (settings.askNames) {
+      const autoCorridorMode = autoConnectCorridor && nodeTypeToCreate === 'corridor';
+      if (settings.askNames && !autoCorridorMode) {
         const result = prompt('Введите название точки:', suggested);
         if (result === null) return;
         name = result;
@@ -179,6 +115,8 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
         finishPolygon([], name);
       }
       if (autoConnectCorridor && nodeTypeToCreate === 'corridor') {
+        // getState() needed: addPoint is batched by React, so the closure's `points`
+        // doesn't yet contain the just-added node.
         const newPoints = useEditorStore.getState().points;
         const newNode = newPoints[newPoints.length - 1];
         if (lastCorridorNodeId) {
@@ -237,8 +175,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
     if (mode === 'polygon' && polygonPoints.length >= 3) {
       const first = polygonPoints[0];
-      const dist = Math.sqrt((x - first.x) ** 2 + (y - first.y) ** 2);
-      setIsNearFirst(dist <= CLOSE_SNAP_RADIUS);
+      setIsNearFirst(Math.hypot(x - first.x, y - first.y) <= CLOSE_SNAP_RADIUS);
     } else {
       setIsNearFirst(false);
     }
@@ -285,6 +222,8 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       } else if (selectedPoints[0] === point.id) {
         setSelectedPoints([]);
       } else {
+        // Toggle: second click on an already-connected pair removes the edge,
+        // on an unconnected pair adds it. addConnection deduplicates internally.
         const from_id = selectedPoints[0];
         const to_id   = point.id;
         const alreadyConnected = connections.some(
@@ -328,10 +267,8 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
   // ---- Distance helper ----
 
-  const pxToMeters = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-    const dist = Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2);
-    return (dist / resolution).toFixed(2);
-  };
+  const pxToMeters = (from: { x: number; y: number }, to: { x: number; y: number }) =>
+    (Math.hypot(to.x - from.x, to.y - from.y) / resolution).toFixed(2);
 
   return (
     <svg
@@ -368,11 +305,13 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
       {/* Polygons */}
       {polygons.map((poly, idx) => {
-        const deletable      = mode === 'delete';
-        const editable       = mode === 'edit';
-        const bindSelected   = mode === 'bind' && bindingPolygonIndex === idx;
-        const bindable       = mode === 'bind';
-        const stroke = deletable ? '#DC2626' : bindSelected ? '#F59E0B' : settings.polygonStrokeColor;
+        const deletable    = mode === 'delete';
+        const editable     = mode === 'edit';
+        const bindSelected = mode === 'bind' && bindingPolygonIndex === idx;
+        const bindable     = mode === 'bind';
+        const stroke = deletable ? CANVAS_COLORS.DELETE
+          : bindSelected ? CANVAS_COLORS.BIND_ACTIVE
+          : settings.polygonStrokeColor;
         return (
           <g key={`poly-${idx}`}>
             <polygon
@@ -388,7 +327,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
               <text
                 x={poly.points.reduce((s, p) => s + p.x, 0) / poly.points.length}
                 y={poly.points.reduce((s, p) => s + p.y, 0) / poly.points.length}
-                fontSize="16" fontWeight="bold"
+                fontSize={LABEL_FONT_SIZE.POLYGON} fontWeight="bold"
                 fill={settings.polygonStrokeColor}
                 textAnchor="middle" pointerEvents="none"
               >
@@ -433,7 +372,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
             )}
             <line
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              stroke={deletable ? '#DC2626' : settings.lineColor}
+              stroke={deletable ? CANVAS_COLORS.DELETE : settings.lineColor}
               strokeWidth={settings.lineWidth}
               pointerEvents="none"
             />
@@ -449,11 +388,11 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
           <g key={`measure-${idx}`}>
             <line
               x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y}
-              stroke="#16A34A" strokeWidth="2" strokeDasharray="6 3" pointerEvents="none"
+              stroke={CANVAS_COLORS.MEASURE} strokeWidth="2" strokeDasharray="6 3" pointerEvents="none"
             />
-            <circle cx={seg.from.x} cy={seg.from.y} r={4} fill="#16A34A" pointerEvents="none" />
-            <circle cx={seg.to.x}   cy={seg.to.y}   r={4} fill="#16A34A" pointerEvents="none" />
-            <text x={mx} y={my - 8} fontSize="13" fill="#16A34A" textAnchor="middle" pointerEvents="none">
+            <circle cx={seg.from.x} cy={seg.from.y} r={4} fill={CANVAS_COLORS.MEASURE} pointerEvents="none" />
+            <circle cx={seg.to.x}   cy={seg.to.y}   r={4} fill={CANVAS_COLORS.MEASURE} pointerEvents="none" />
+            <text x={mx} y={my - 8} fontSize={LABEL_FONT_SIZE.MEASURE} fill={CANVAS_COLORS.MEASURE} textAnchor="middle" pointerEvents="none">
               {pxToMeters(seg.from, seg.to)} м
             </text>
           </g>
@@ -466,13 +405,13 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
           <line
             x1={measureStart.x} y1={measureStart.y}
             x2={previewPoint.x} y2={previewPoint.y}
-            stroke="#16A34A" strokeWidth="2" strokeDasharray="6 3" pointerEvents="none"
+            stroke={CANVAS_COLORS.MEASURE} strokeWidth="2" strokeDasharray="6 3" pointerEvents="none"
           />
-          <circle cx={measureStart.x} cy={measureStart.y} r={4} fill="#16A34A" pointerEvents="none" />
+          <circle cx={measureStart.x} cy={measureStart.y} r={4} fill={CANVAS_COLORS.MEASURE} pointerEvents="none" />
           <text
             x={(measureStart.x + previewPoint.x) / 2}
             y={(measureStart.y + previewPoint.y) / 2 - 8}
-            fontSize="13" fill="#16A34A" textAnchor="middle" pointerEvents="none"
+            fontSize={LABEL_FONT_SIZE.MEASURE} fill={CANVAS_COLORS.MEASURE} textAnchor="middle" pointerEvents="none"
           >
             {pxToMeters(measureStart, previewPoint)} м
           </text>
@@ -494,7 +433,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
                 <line
                   key={`bind-${idx}-${nodeId}`}
                   x1={cx} y1={cy} x2={node.x} y2={node.y}
-                  stroke={isSelected ? '#F59E0B' : '#94A3B8'}
+                  stroke={isSelected ? CANVAS_COLORS.BIND_ACTIVE : CANVAS_COLORS.BIND_INACTIVE}
                   strokeWidth={isSelected ? 2 : 1}
                   strokeDasharray="5 3"
                   opacity={isSelected ? 1 : 0.45}
@@ -507,12 +446,12 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
       {/* Points (nav-nodes) */}
       {points.map((point) => {
-        const isSelected    = mode === 'connect' && selectedPoints.includes(point.id);
+        const isSelected     = mode === 'connect' && selectedPoints.includes(point.id);
         const isDraggingThis = draggingId === point.id;
-        const fill          = isSelected ? '#2563EB' : (NODE_TYPE_COLOR[point.node_type] || settings.pointColor);
-        const stroke        = isSelected ? '#fff' : settings.pointStrokeColor;
-        const nodeCursor    = mode === 'edit' ? (isDraggingThis ? 'grabbing' : 'grab') : 'pointer';
-        const r             = settings.pointRadius;
+        const fill           = isSelected ? CANVAS_COLORS.SELECT : (NODE_TYPE_COLOR[point.node_type] || settings.pointColor);
+        const stroke         = isSelected ? '#fff' : settings.pointStrokeColor;
+        const nodeCursor     = mode === 'edit' ? (isDraggingThis ? 'grabbing' : 'grab') : 'pointer';
+        const r              = settings.pointRadius;
 
         const isBound = mode === 'bind' && bindingPolygonIndex !== null &&
           (polygons[bindingPolygonIndex]?.nav_node_client_ids ?? []).includes(point.id);
@@ -523,18 +462,18 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
           <g key={`point-${point.id}`}>
             {/* Selection ring (connect mode) */}
             {isSelected && (
-              <circle cx={point.x} cy={point.y} r={r + 6}
-                fill="none" stroke="#2563EB" strokeWidth="2" pointerEvents="none" />
+              <circle cx={point.x} cy={point.y} r={r + NODE_RING_OFFSET.SELECT}
+                fill="none" stroke={CANVAS_COLORS.SELECT} strokeWidth="2" pointerEvents="none" />
             )}
             {/* Bound entry-node ring (bind mode) */}
             {isBound && (
-              <circle cx={point.x} cy={point.y} r={r + 6}
-                fill="none" stroke="#F59E0B" strokeWidth="2.5" pointerEvents="none" />
+              <circle cx={point.x} cy={point.y} r={r + NODE_RING_OFFSET.BOUND}
+                fill="none" stroke={CANVAS_COLORS.BIND_ACTIVE} strokeWidth="2.5" pointerEvents="none" />
             )}
             {/* Bindable-but-not-yet-bound hint ring */}
             {isBindableRoom && (
-              <circle cx={point.x} cy={point.y} r={r + 5}
-                fill="none" stroke="#10B981" strokeWidth="1.5" strokeDasharray="3 2" pointerEvents="none" />
+              <circle cx={point.x} cy={point.y} r={r + NODE_RING_OFFSET.HINT}
+                fill="none" stroke={CANVAS_COLORS.BIND_HINT} strokeWidth="1.5" strokeDasharray="3 2" pointerEvents="none" />
             )}
             <NavNode
               point={point} r={r} fill={fill} stroke={stroke} cursor={nodeCursor}
@@ -545,7 +484,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
             {settings.askNames && point.name && (
               <text
                 x={point.x + r + 4} y={point.y - 4}
-                fontSize="14" fill={fill} pointerEvents="none"
+                fontSize={LABEL_FONT_SIZE.NODE} fill={fill} pointerEvents="none"
               >
                 {point.name}
               </text>
@@ -566,7 +505,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
             opacity="0.5"
           />
           {polygonPoints.map((pt, idx) => {
-            const isFirst   = idx === 0 && polygonPoints.length >= 3;
+            const isFirst    = idx === 0 && polygonPoints.length >= 3;
             const snapActive = isFirst && isNearFirst;
             return (
               <g key={`preview-vertex-${idx}`}>
@@ -574,14 +513,14 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
                   <circle
                     cx={pt.x} cy={pt.y}
                     r={settings.polygonVertexRadius + (snapActive ? 7 : 4)}
-                    fill="none" stroke="#16A34A" strokeWidth="2"
+                    fill="none" stroke={CANVAS_COLORS.MEASURE} strokeWidth="2"
                     opacity={snapActive ? 1 : 0.5} pointerEvents="none"
                   />
                 )}
                 <circle
                   cx={pt.x} cy={pt.y}
                   r={settings.polygonVertexRadius}
-                  fill={isFirst ? '#16A34A' : settings.polygonVertexColor}
+                  fill={isFirst ? CANVAS_COLORS.MEASURE : settings.polygonVertexColor}
                   pointerEvents="none"
                 />
               </g>
@@ -604,34 +543,28 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       {previewPoint && mode === 'measure' && !measureStart && (
         <circle
           cx={previewPoint.x} cy={previewPoint.y}
-          r={4} fill="#16A34A" opacity="0.6" pointerEvents="none"
+          r={4} fill={CANVAS_COLORS.MEASURE} opacity="0.6" pointerEvents="none"
         />
       )}
 
       {/* Route preview overlay */}
       {routeOverlay && routeOverlay.polyline.length >= 2 && (
         <g pointerEvents="none">
-          {/* Full route line */}
           <polyline
             points={routeOverlay.polyline.map(p => `${p.x},${p.y}`).join(' ')}
             fill="none"
-            stroke="#EF4444"
+            stroke={CANVAS_COLORS.ROUTE}
             strokeWidth={3}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.8}
           />
-          {/* Step waypoint markers */}
           {routeOverlay.stepMarkers.map((marker, i) => (
             <g key={`step-${i}`}>
-              <circle
-                cx={marker.x} cy={marker.y} r={5}
-                fill="#fff" stroke="#EF4444" strokeWidth={2}
-              />
-              <circle
-                cx={marker.x} cy={marker.y} r={7}
-                fill="none" stroke="#EF4444" strokeWidth={1} opacity={0.4}
-              />
+              <circle cx={marker.x} cy={marker.y} r={5}
+                fill="#fff" stroke={CANVAS_COLORS.ROUTE} strokeWidth={2} />
+              <circle cx={marker.x} cy={marker.y} r={7}
+                fill="none" stroke={CANVAS_COLORS.ROUTE} strokeWidth={1} opacity={0.4} />
             </g>
           ))}
         </g>
