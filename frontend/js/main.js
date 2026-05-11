@@ -96,6 +96,23 @@ const HIER_TYPE_KIND = {
   floor: { type: "Этаж", kind: "Этаж" },
 };
 
+const ENTITY_EDIT_EXPANDED_KEY = "vkrb_entity_edit_expanded";
+
+function isEntityEditExpanded() {
+  return localStorage.getItem(ENTITY_EDIT_EXPANDED_KEY) !== "0";
+}
+
+function applyEntityEditCollapsedUi() {
+  if (!dom.entityEditToggleBtn || !dom.entityEditCardBody) return;
+  const expanded = isEntityEditExpanded();
+  dom.entityEditCardBody.hidden = !expanded;
+  if (dom.entityEditCard) {
+    dom.entityEditCard.classList.toggle("entity-edit-card--collapsed", !expanded);
+  }
+  dom.entityEditToggleBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  dom.entityEditToggleBtn.textContent = expanded ? "Свернуть" : "Развернуть";
+}
+
 function getRenameLevel() {
   if (state.selected.floorId) return "floor";
   if (state.selected.structureId) return "structure";
@@ -186,6 +203,7 @@ function syncEntityEditCard() {
   dom.entityEditFullName.value = row.full_name || "";
   dom.entityEditDescription.value = row.description || "";
   dom.entityEditAddress.value = row.address || "";
+  applyEntityEditCollapsedUi();
   syncContentGridLayout();
 }
 
@@ -1233,6 +1251,12 @@ dom.objectKindForm.addEventListener("submit", (e) =>
   }),
 );
 
+dom.entityEditToggleBtn?.addEventListener("click", () => {
+  const nextExpanded = !isEntityEditExpanded();
+  localStorage.setItem(ENTITY_EDIT_EXPANDED_KEY, nextExpanded ? "1" : "0");
+  applyEntityEditCollapsedUi();
+});
+
 dom.entityEditForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
@@ -1539,6 +1563,7 @@ function initPlanMarkerLayoutListeners() {
 run(async () => {
   await Promise.all([loadInitialLists(), loadObjectDictionaries()]);
   initPlanMarkerLayoutListeners();
+  applyEntityEditCollapsedUi();
 });
 
 function normalizeImageUrl(url) {

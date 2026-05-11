@@ -374,15 +374,40 @@ td {
   grid-template-columns: 1fr;
 }
 
+.content-grid--floor .entity-edit-card {
+  width: 100%;
+  max-width: min(440px, 100%);
+  justify-self: end;
+}
+
 .content-grid--dict #entityEditCard {
   display: none !important;
 }
 
-.entity-edit-card h3 {
-  margin: 0 0 14px 0;
+.entity-edit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.entity-edit-card--collapsed .entity-edit-card-header {
+  margin-bottom: 0;
+}
+
+.entity-edit-card-header h3 {
+  margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
   color: #1a1a1a;
+  flex: 1;
+  min-width: 0;
+}
+
+.entity-edit-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .entity-edit-subtitle {

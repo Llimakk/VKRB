@@ -13,6 +13,8 @@ export const dom = {
   contentGrid: document.getElementById("contentGrid"),
   hierarchyMidRow: document.getElementById("hierarchyMidRow"),
   entityEditCard: document.getElementById("entityEditCard"),
+  entityEditCardBody: document.getElementById("entityEditCardBody"),
+  entityEditToggleBtn: document.getElementById("entityEditToggleBtn"),
   entityEditTitle: document.getElementById("entityEditTitle"),
   entityEditReadId: document.getElementById("entityEditReadId"),
   entityEditReadType: document.getElementById("entityEditReadType"),

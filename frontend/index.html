@@ -164,52 +164,65 @@
           </section>
 
           <section id="entityEditCard" class="card entity-edit-card" hidden>
-            <h3 id="entityEditTitle">Объект</h3>
-            <div class="entity-edit-section entity-edit-readonly-block">
-              <dl class="entity-edit-dl">
-                <div class="entity-edit-dl-row">
-                  <dt>Код (id)</dt>
-                  <dd id="entityEditReadId">—</dd>
-                </div>
-                <div class="entity-edit-dl-row">
-                  <dt>Тип</dt>
-                  <dd id="entityEditReadType">—</dd>
-                </div>
-                <div class="entity-edit-dl-row">
-                  <dt>Вид</dt>
-                  <dd id="entityEditReadKind">—</dd>
-                </div>
-                <div class="entity-edit-dl-row entity-edit-dl-row--link">
-                  <dt>Ссылка на фото (MinIO)</dt>
-                  <dd>
-                    <span id="entityEditPhotoEmpty" class="muted">—</span>
-                    <a id="entityEditPhotoLink" class="entity-edit-url" href="#" target="_blank" rel="noopener noreferrer" hidden></a>
-                  </dd>
-                </div>
-              </dl>
+            <div class="entity-edit-card-header">
+              <h3 id="entityEditTitle">Объект</h3>
+              <button
+                type="button"
+                id="entityEditToggleBtn"
+                class="btn-secondary entity-edit-toggle"
+                aria-expanded="true"
+                aria-controls="entityEditCardBody"
+              >
+                Свернуть
+              </button>
             </div>
-            <form id="entityEditForm" class="entity-edit-form" novalidate>
-              <h4 class="entity-edit-subtitle">Редактирование</h4>
-              <div class="entity-edit-fields">
-                <label for="entityEditNumber">Номер</label>
-                <input id="entityEditNumber" type="number" min="1" step="1" autocomplete="off" />
-
-                <label for="entityEditShortName">Краткое имя <span class="req">*</span></label>
-                <input id="entityEditShortName" type="text" autocomplete="off" required />
-
-                <label for="entityEditFullName">Полное наименование</label>
-                <input id="entityEditFullName" type="text" autocomplete="off" />
-
-                <label for="entityEditDescription">Описание</label>
-                <textarea id="entityEditDescription" rows="3"></textarea>
-
-                <label for="entityEditAddress">Адрес</label>
-                <input id="entityEditAddress" type="text" autocomplete="off" />
+            <div id="entityEditCardBody" class="entity-edit-card-body">
+              <div class="entity-edit-section entity-edit-readonly-block">
+                <dl class="entity-edit-dl">
+                  <div class="entity-edit-dl-row">
+                    <dt>Код (id)</dt>
+                    <dd id="entityEditReadId">—</dd>
+                  </div>
+                  <div class="entity-edit-dl-row">
+                    <dt>Тип</dt>
+                    <dd id="entityEditReadType">—</dd>
+                  </div>
+                  <div class="entity-edit-dl-row">
+                    <dt>Вид</dt>
+                    <dd id="entityEditReadKind">—</dd>
+                  </div>
+                  <div class="entity-edit-dl-row entity-edit-dl-row--link">
+                    <dt>Ссылка на фото (MinIO)</dt>
+                    <dd>
+                      <span id="entityEditPhotoEmpty" class="muted">—</span>
+                      <a id="entityEditPhotoLink" class="entity-edit-url" href="#" target="_blank" rel="noopener noreferrer" hidden></a>
+                    </dd>
+                  </div>
+                </dl>
               </div>
-              <div class="entity-edit-actions">
-                <button type="submit">Сохранить</button>
-              </div>
-            </form>
+              <form id="entityEditForm" class="entity-edit-form" novalidate>
+                <h4 class="entity-edit-subtitle">Редактирование</h4>
+                <div class="entity-edit-fields">
+                  <label for="entityEditNumber">Номер</label>
+                  <input id="entityEditNumber" type="number" min="1" step="1" autocomplete="off" />
+
+                  <label for="entityEditShortName">Краткое имя <span class="req">*</span></label>
+                  <input id="entityEditShortName" type="text" autocomplete="off" required />
+
+                  <label for="entityEditFullName">Полное наименование</label>
+                  <input id="entityEditFullName" type="text" autocomplete="off" />
+
+                  <label for="entityEditDescription">Описание</label>
+                  <textarea id="entityEditDescription" rows="3"></textarea>
+
+                  <label for="entityEditAddress">Адрес</label>
+                  <input id="entityEditAddress" type="text" autocomplete="off" />
+                </div>
+                <div class="entity-edit-actions">
+                  <button type="submit">Сохранить</button>
+                </div>
+              </form>
+            </div>
           </section>
         </div>
       </section>
