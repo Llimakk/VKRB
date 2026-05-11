@@ -5,6 +5,7 @@ from .models import (  # noqa: F401
     Floor,
     Plan,
     ObjectType,
+    ObjectKind,
     Object,
     TransitionZone,
 )

@@ -13,6 +13,7 @@ import app.models  # noqa: F401
 
 from app.api.admin.locations import router as locations_router
 from app.api.admin.objects import router as objects_router
+from app.api.admin.object_kinds import router as object_kinds_router
 from app.api.admin.object_types import router as object_types_router
 from app.api.admin.plans import router as plans_router
 from app.api.admin.transition_zones import router as transition_zones_router
@@ -32,6 +33,7 @@ app.add_middleware(
 app.include_router(locations_router)
 app.include_router(objects_router)
 app.include_router(object_types_router)
+app.include_router(object_kinds_router)
 app.include_router(plans_router)
 app.include_router(transition_zones_router)
 app.include_router(media_router)

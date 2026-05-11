@@ -107,14 +107,14 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
     objects = (
         db.query(Object)
         .filter(Object.plan_id == plan_id)
-        .options(joinedload(Object.object_type))
+        .options(joinedload(Object.object_type), joinedload(Object.object_kind))
         .order_by(Object.object_type_id, Object.name)
         .all()
     )
     transition_zones = (
         db.query(TransitionZone)
         .filter(TransitionZone.plan_id == plan_id)
-        .options(joinedload(TransitionZone.object_type))
+        .options(joinedload(TransitionZone.object_type), joinedload(TransitionZone.object_kind))
         .order_by(TransitionZone.object_type_id, TransitionZone.name)
         .all()
     )
@@ -132,7 +132,26 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
             {
                 "id": o.id,
                 "name": o.name,
-                "object_type": {"id": o.object_type.id, "name": o.object_type.name},
+                "number": o.number,
+                "full_name": o.full_name,
+                "description": o.description,
+                "address": o.address,
+                "drawing_url": effective_photo_url(o.drawing_url, o.drawing_minio_object_key),
+                "object_type": {
+                    "id": o.object_type.id,
+                    "name": o.object_type.name,
+                    "number": o.object_type.number,
+                    "full_name": o.object_type.full_name,
+                    "description": o.object_type.description,
+                },
+                "object_kind": {
+                    "id": o.object_kind.id,
+                    "name": o.object_kind.name,
+                    "object_type_id": o.object_kind.object_type_id,
+                    "number": o.object_kind.number,
+                    "full_name": o.object_kind.full_name,
+                    "description": o.object_kind.description,
+                },
                 "pos_x": o.pos_x,
                 "pos_y": o.pos_y,
             }
@@ -142,7 +161,26 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
             {
                 "id": z.id,
                 "name": z.name,
-                "object_type": {"id": z.object_type.id, "name": z.object_type.name},
+                "number": z.number,
+                "full_name": z.full_name,
+                "description": z.description,
+                "address": z.address,
+                "drawing_url": effective_photo_url(z.drawing_url, z.drawing_minio_object_key),
+                "object_type": {
+                    "id": z.object_type.id,
+                    "name": z.object_type.name,
+                    "number": z.object_type.number,
+                    "full_name": z.object_type.full_name,
+                    "description": z.object_type.description,
+                },
+                "object_kind": {
+                    "id": z.object_kind.id,
+                    "name": z.object_kind.name,
+                    "object_type_id": z.object_kind.object_type_id,
+                    "number": z.object_kind.number,
+                    "full_name": z.object_kind.full_name,
+                    "description": z.object_kind.description,
+                },
                 "pos_x": z.pos_x,
                 "pos_y": z.pos_y,
             }
@@ -160,14 +198,14 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
     objects = (
         db.query(Object)
         .filter(Object.plan_id == plan.id)
-        .options(joinedload(Object.object_type))
+        .options(joinedload(Object.object_type), joinedload(Object.object_kind))
         .order_by(Object.object_type_id, Object.name)
         .all()
     )
     transition_zones = (
         db.query(TransitionZone)
         .filter(TransitionZone.plan_id == plan.id)
-        .options(joinedload(TransitionZone.object_type))
+        .options(joinedload(TransitionZone.object_type), joinedload(TransitionZone.object_kind))
         .order_by(TransitionZone.object_type_id, TransitionZone.name)
         .all()
     )
@@ -178,7 +216,26 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
         return {
             "id": z.id,
             "name": z.name,
-            "object_type": {"id": z.object_type.id, "name": z.object_type.name},
+            "number": z.number,
+            "full_name": z.full_name,
+            "description": z.description,
+            "address": z.address,
+            "drawing_url": effective_photo_url(z.drawing_url, z.drawing_minio_object_key),
+            "object_type": {
+                "id": z.object_type.id,
+                "name": z.object_type.name,
+                "number": z.object_type.number,
+                "full_name": z.object_type.full_name,
+                "description": z.object_type.description,
+            },
+            "object_kind": {
+                "id": z.object_kind.id,
+                "name": z.object_kind.name,
+                "object_type_id": z.object_kind.object_type_id,
+                "number": z.object_kind.number,
+                "full_name": z.object_kind.full_name,
+                "description": z.object_kind.description,
+            },
             "pos_x": z.pos_x,
             "pos_y": z.pos_y,
         }
@@ -196,7 +253,26 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
             {
                 "id": o.id,
                 "name": o.name,
-                "object_type": {"id": o.object_type.id, "name": o.object_type.name},
+                "number": o.number,
+                "full_name": o.full_name,
+                "description": o.description,
+                "address": o.address,
+                "drawing_url": effective_photo_url(o.drawing_url, o.drawing_minio_object_key),
+                "object_type": {
+                    "id": o.object_type.id,
+                    "name": o.object_type.name,
+                    "number": o.object_type.number,
+                    "full_name": o.object_type.full_name,
+                    "description": o.object_type.description,
+                },
+                "object_kind": {
+                    "id": o.object_kind.id,
+                    "name": o.object_kind.name,
+                    "object_type_id": o.object_kind.object_type_id,
+                    "number": o.object_kind.number,
+                    "full_name": o.object_kind.full_name,
+                    "description": o.object_kind.description,
+                },
                 "pos_x": o.pos_x,
                 "pos_y": o.pos_y,
             }

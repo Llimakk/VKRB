@@ -75,6 +75,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  deleteCampus: (id) => request(`/admin/campuses/${id}`, { method: "DELETE" }),
+  deleteBuilding: (id) => request(`/admin/buildings/${id}`, { method: "DELETE" }),
+  deleteStructure: (id) => request(`/admin/structures/${id}`, { method: "DELETE" }),
+  deleteFloor: (id) => request(`/admin/floors/${id}`, { method: "DELETE" }),
   getBuildings: (campusId) => request(`/admin/buildings?campus_id=${campusId}`),
   getStructures: (buildingId) => request(`/admin/structures?building_id=${buildingId}`),
   getFloors: (structureId) => request(`/admin/floors?structure_id=${structureId}`),
@@ -87,7 +91,41 @@ export const api = {
     return request(`/admin/${modelName}/${id}/image`, { method: "PUT", body: fd });
   },
   deleteEntityImage: (modelName, id) => request(`/admin/${modelName}/${id}/image`, { method: "DELETE" }),
+  uploadEntityDrawing: async (modelName, id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request(`/admin/${modelName}/${id}/drawing`, { method: "PUT", body: fd });
+  },
+  deleteEntityDrawing: (modelName, id) => request(`/admin/${modelName}/${id}/drawing`, { method: "DELETE" }),
   getObjectTypes: () => request("/admin/object-types"),
+  createObjectType: (payload) =>
+    request("/admin/object-types", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateObjectType: (id, payload) =>
+    request(`/admin/object-types/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteObjectType: (id) => request(`/admin/object-types/${id}`, { method: "DELETE" }),
+  getObjectKinds: (objectTypeId = null) =>
+    request(objectTypeId ? `/admin/object-kinds?object_type_id=${objectTypeId}` : "/admin/object-kinds"),
+  createObjectKind: (payload) =>
+    request("/admin/object-kinds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateObjectKind: (id, payload) =>
+    request(`/admin/object-kinds/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteObjectKind: (id) => request(`/admin/object-kinds/${id}`, { method: "DELETE" }),
   createObject: (payload) =>
     request("/admin/objects", {
       method: "POST",

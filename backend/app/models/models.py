@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -11,9 +11,16 @@ class Campus(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     buildings: Mapped[list["Building"]] = relationship(back_populates="campus", cascade="all, delete-orphan")
 
@@ -24,9 +31,16 @@ class Building(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     campus_id: Mapped[int] = mapped_column(ForeignKey("campus.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     campus: Mapped["Campus"] = relationship(back_populates="buildings")
     structures: Mapped[list["Structure"]] = relationship(back_populates="building", cascade="all, delete-orphan")
@@ -38,9 +52,16 @@ class Structure(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     building_id: Mapped[int] = mapped_column(ForeignKey("building.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     building: Mapped["Building"] = relationship(back_populates="structures")
     floors: Mapped[list["Floor"]] = relationship(back_populates="structure", cascade="all, delete-orphan")
@@ -53,6 +74,13 @@ class Floor(Base):
     structure_id: Mapped[int] = mapped_column(ForeignKey("structure.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     sort_order: Mapped[int] = mapped_column(nullable=False, default=0)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     structure: Mapped["Structure"] = relationship(back_populates="floors")
     plan: Mapped["Plan | None"] = relationship(back_populates="floor", cascade="all, delete-orphan", uselist=False)
@@ -90,9 +118,32 @@ class ObjectType(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    object_kinds: Mapped[list["ObjectKind"]] = relationship(back_populates="object_type", cascade="all, delete-orphan")
     objects: Mapped[list["Object"]] = relationship(back_populates="object_type", cascade="all, delete-orphan")
     transition_zones: Mapped[list["TransitionZone"]] = relationship(back_populates="object_type")
+
+
+class ObjectKind(Base):
+    __tablename__ = "object_kind"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    object_type: Mapped["ObjectType"] = relationship(back_populates="object_kinds")
+    objects: Mapped[list["Object"]] = relationship(back_populates="object_kind")
+    transition_zones: Mapped[list["TransitionZone"]] = relationship(back_populates="object_kind")
+
+    __table_args__ = (
+        UniqueConstraint("object_type_id", "name", name="uq_object_kind_type_name"),
+    )
 
 
 class TransitionZone(Base):
@@ -101,15 +152,24 @@ class TransitionZone(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id", ondelete="CASCADE"), nullable=False)
     object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="RESTRICT"), nullable=False)
+    object_kind_id: Mapped[int] = mapped_column(ForeignKey("object_kind.id", ondelete="RESTRICT"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="transition_zones")
     object_type: Mapped["ObjectType"] = relationship(back_populates="transition_zones")
+    object_kind: Mapped["ObjectKind"] = relationship(back_populates="transition_zones")
 
     __table_args__ = (
         UniqueConstraint("plan_id", "object_type_id", "name", name="uq_transition_zone_plan_type_name"),
@@ -125,15 +185,24 @@ class Object(Base):
         nullable=False,
     )
     object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="RESTRICT"), nullable=False)
+    object_kind_id: Mapped[int] = mapped_column(ForeignKey("object_kind.id", ondelete="RESTRICT"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drawing_minio_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawing_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    drawing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="objects")
     object_type: Mapped["ObjectType"] = relationship(back_populates="objects")
+    object_kind: Mapped["ObjectKind"] = relationship(back_populates="objects")
 
     __table_args__ = (
         UniqueConstraint("plan_id", "object_type_id", "name", name="uq_object_plan_type_name"),

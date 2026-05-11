@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { dom, fillSelect, setError } from "./dom.js";
+import { dom, fillSelect } from "./dom.js";
 
 const state = {
   campuses: [],
@@ -7,6 +7,7 @@ const state = {
   structures: [],
   floors: [],
   objectTypes: [],
+  objectKinds: [],
   selected: {
     campusId: null,
     buildingId: null,
@@ -19,10 +20,16 @@ const state = {
     transitionZoneId: null,
   },
   focusedTransitionZoneId: null,
+  /** @type {"none"|"campus"|"building"|"structure"|"floor"} */
+  uiMode: "none",
 };
 
 function getSelectedName(items, id) {
   return items.find((i) => i.id === Number(id))?.name || "-";
+}
+
+function syncDeleteBranchButton() {
+  dom.deleteBranchBtn.disabled = !state.selected.campusId;
 }
 
 function renderPath() {
@@ -64,6 +71,9 @@ function clearPlanView() {
 
 let editingTransitionZoneId = null;
 let confirmResolver = null;
+let entityMetaSaving = false;
+/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; title?: string }} */
+let pendingMetaContext = null;
 
 const CREATE_LABELS = {
   none: { title: "Создать новый кампус", placeholder: "Введите название кампуса" },
@@ -72,11 +82,18 @@ const CREATE_LABELS = {
   structure: { title: "Создать новый этаж", placeholder: "Введите название этажа" },
 };
 
-const RENAME_TITLES = {
-  campus: "Название кампуса",
-  building: "Название корпуса",
-  structure: "Название строения",
-  floor: "Название этажа",
+const ENTITY_EDIT_TITLES = {
+  campus: "Кампус",
+  building: "Корпус",
+  structure: "Строение",
+  floor: "Этаж",
+};
+
+const HIER_TYPE_KIND = {
+  campus: { type: "Кампус", kind: "Кампус" },
+  building: { type: "Корпус", kind: "Корпус" },
+  structure: { type: "Строение", kind: "Строение" },
+  floor: { type: "Этаж", kind: "Этаж" },
 };
 
 function getRenameLevel() {
@@ -86,22 +103,90 @@ function getRenameLevel() {
   return "campus";
 }
 
-function nameForRenameLevel(level) {
-  if (level === "floor") return getSelectedName(state.floors, state.selected.floorId);
-  if (level === "structure") return getSelectedName(state.structures, state.selected.structureId);
-  if (level === "building") return getSelectedName(state.buildings, state.selected.buildingId);
-  return getSelectedName(state.campuses, state.selected.campusId);
+function pickHierEntityRow() {
+  const level = getRenameLevel();
+  if (level === "floor") {
+    return { level, row: state.floors.find((f) => f.id === state.selected.floorId) ?? null };
+  }
+  if (level === "structure") {
+    return { level, row: state.structures.find((s) => s.id === state.selected.structureId) ?? null };
+  }
+  if (level === "building") {
+    return { level, row: state.buildings.find((b) => b.id === state.selected.buildingId) ?? null };
+  }
+  return { level: "campus", row: state.campuses.find((c) => c.id === state.selected.campusId) ?? null };
 }
 
-function syncRenameField() {
-  if (!state.selected.campusId) {
-    dom.renameCard.hidden = true;
+function photoUrlForEntityEdit(level, row) {
+  if (!row) return "";
+  if (level === "floor") {
+    const fromCtx =
+      state.selected.floorId === row.id && state.planDetail?.plan?.photo_url
+        ? state.planDetail.plan.photo_url
+        : null;
+    const u = fromCtx || row.plan_photo_url;
+    return u ? normalizeImageUrl(u) : "";
+  }
+  const u = row.photo_url;
+  return u ? normalizeImageUrl(u) : "";
+}
+
+function syncContentGridLayout() {
+  const grid = dom.contentGrid;
+  if (!grid) return;
+  grid.className = "content-grid";
+  if (state.uiMode === "none") {
+    grid.classList.add("content-grid--dict");
     return;
   }
-  dom.renameCard.hidden = false;
-  const level = getRenameLevel();
-  dom.renameCardHeading.textContent = RENAME_TITLES[level];
-  dom.renameEntityInput.value = nameForRenameLevel(level);
+  if (state.uiMode === "floor") {
+    grid.classList.add("content-grid--floor");
+    return;
+  }
+  grid.classList.add("content-grid--split");
+}
+
+function syncEntityEditCard() {
+  if (!dom.entityEditCard) return;
+  if (state.uiMode === "none") {
+    dom.entityEditCard.hidden = true;
+    syncContentGridLayout();
+    return;
+  }
+  if (!state.selected.campusId) {
+    dom.entityEditCard.hidden = true;
+    syncContentGridLayout();
+    return;
+  }
+  const { level, row } = pickHierEntityRow();
+  if (!row) {
+    dom.entityEditCard.hidden = true;
+    syncContentGridLayout();
+    return;
+  }
+  dom.entityEditCard.hidden = false;
+  dom.entityEditTitle.textContent = ENTITY_EDIT_TITLES[level] || "Объект";
+  dom.entityEditReadId.textContent = String(row.id);
+  dom.entityEditReadType.textContent = HIER_TYPE_KIND[level]?.type || "—";
+  dom.entityEditReadKind.textContent = HIER_TYPE_KIND[level]?.kind || "—";
+  const purl = photoUrlForEntityEdit(level, row);
+  if (purl) {
+    dom.entityEditPhotoLink.href = purl;
+    const show = purl.length > 72 ? `${purl.slice(0, 44)}…${purl.slice(-22)}` : purl;
+    dom.entityEditPhotoLink.textContent = show;
+    dom.entityEditPhotoLink.hidden = false;
+    dom.entityEditPhotoEmpty.hidden = true;
+  } else {
+    dom.entityEditPhotoLink.hidden = true;
+    dom.entityEditPhotoEmpty.hidden = false;
+    dom.entityEditPhotoEmpty.textContent = "—";
+  }
+  dom.entityEditNumber.value = row.number != null ? String(row.number) : "";
+  dom.entityEditShortName.value = row.name || "";
+  dom.entityEditFullName.value = row.full_name || "";
+  dom.entityEditDescription.value = row.description || "";
+  dom.entityEditAddress.value = row.address || "";
+  syncContentGridLayout();
 }
 
 function applyCreateFormsVisibility(mode) {
@@ -127,16 +212,20 @@ function applyCreateFormsVisibility(mode) {
 }
 
 function setMode(mode) {
+  state.uiMode = mode;
   if (mode === "none") {
     dom.photoCard.style.display = "none";
     dom.planMarkerLegend.hidden = true;
     dom.createEntityCard.style.display = "block";
-    dom.rightCard.style.display = "none";
+    dom.rightCard.style.display = "block";
+    dom.rightCardTitle.textContent = "Типы и виды объектов";
+    dom.zoneManagement.hidden = true;
+    dom.dictionariesManagement.hidden = false;
     dom.emptyStateText.style.display = "block";
     dom.emptyStateText.textContent =
       "Создайте кампус или выберите существующий в дереве.";
     applyCreateFormsVisibility("none");
-    syncRenameField();
+    syncEntityEditCard();
     return;
   }
   dom.photoCard.style.display = "block";
@@ -147,9 +236,11 @@ function setMode(mode) {
     dom.rightCardTitle.textContent = "Зоны перехода";
     dom.rightCard.style.display = "block";
     dom.objectForm.style.display = "grid";
+    dom.zoneManagement.hidden = false;
+    dom.dictionariesManagement.hidden = true;
     dom.emptyStateText.style.display = "none";
     applyCreateFormsVisibility("floor");
-    syncRenameField();
+    syncEntityEditCard();
     return;
   }
   dom.planMarkerLegend.hidden = true;
@@ -160,7 +251,7 @@ function setMode(mode) {
   dom.objectsTbody.innerHTML = "";
   dom.emptyStateText.style.display = "none";
   applyCreateFormsVisibility(mode);
-  syncRenameField();
+  syncEntityEditCard();
 }
 
 function pickEntityPhotoUrl(modelName, id) {
@@ -194,10 +285,12 @@ function loadEntityImage(modelName, id) {
   }
 }
 
-/** Типы зон перехода (согласовано с API): коридор, лестница, лифт, переход. */
 function isTransitionZoneTypeName(name) {
-  const n = (name || "").toLowerCase();
+  const n = (name || "").toLowerCase().trim();
   return (
+    n === "зона перехода" ||
+    n === "transition_zone" ||
+    n === "transition zone" ||
     n.includes("коридор") ||
     n.includes("лестниц") ||
     n.includes("лифт") ||
@@ -205,8 +298,18 @@ function isTransitionZoneTypeName(name) {
   );
 }
 
-function transitionZoneObjectTypes() {
-  return state.objectTypes.filter((t) => isTransitionZoneTypeName(t.name));
+function transitionZoneTypeIds() {
+  const ids = state.objectTypes.filter((t) => isTransitionZoneTypeName(t.name)).map((t) => t.id);
+  return new Set(ids);
+}
+
+function transitionZoneKinds() {
+  const typeIds = transitionZoneTypeIds();
+  return state.objectKinds.filter((k) => typeIds.has(k.object_type_id));
+}
+
+function objectTypeNameById(id) {
+  return state.objectTypes.find((t) => t.id === id)?.name || "—";
 }
 
 function renderObjects() {
@@ -227,7 +330,7 @@ function renderObjects() {
     markCell.appendChild(mark);
 
     const typeCell = document.createElement("td");
-    typeCell.textContent = obj.object_type.name;
+    typeCell.textContent = obj.object_kind?.name || obj.object_type.name;
 
     const nameCell = document.createElement("td");
     nameCell.textContent = obj.name;
@@ -244,17 +347,18 @@ function renderObjects() {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.textContent = "Удалить";
-    deleteBtn.onclick = async () => {
-      const confirmed = await askConfirmation({
-        title: "Удаление зоны перехода",
-        message: `Удалить зону «${obj.name}»?`,
-        okText: "Удалить",
-        cancelText: "Отмена",
+    deleteBtn.onclick = () =>
+      void run(async () => {
+        const confirmed = await askConfirmation({
+          title: "Удаление зоны перехода",
+          message: `Удалить зону «${obj.name}»?`,
+          okText: "Удалить",
+          cancelText: "Отмена",
+        });
+        if (!confirmed) return;
+        await api.deleteTransitionZone(obj.id);
+        await loadFloorContext(state.selected.floorId);
       });
-      if (!confirmed) return;
-      await api.deleteTransitionZone(obj.id);
-      await loadFloorContext(state.selected.floorId);
-    };
 
     const placeBtn = document.createElement("button");
     placeBtn.type = "button";
@@ -266,19 +370,20 @@ function renderObjects() {
     clearMarkBtn.type = "button";
     clearMarkBtn.textContent = "Удалить отметку на плане";
     clearMarkBtn.disabled = obj.pos_x == null || obj.pos_y == null;
-    clearMarkBtn.onclick = async () => {
-      await api.updateTransitionZone(obj.id, {
-        object_type_id: obj.object_type.id,
-        name: obj.name,
-        pos_x: null,
-        pos_y: null,
+    clearMarkBtn.onclick = () =>
+      void run(async () => {
+        await api.updateTransitionZone(obj.id, {
+          object_kind_id: obj.object_kind.id,
+          name: obj.name,
+          pos_x: null,
+          pos_y: null,
+        });
+        if (state.placement.transitionZoneId === obj.id) {
+          state.placement.transitionZoneId = null;
+        }
+        await loadFloorContext(state.selected.floorId);
+        dom.planHint.textContent = "Отметка зоны удалена.";
       });
-      if (state.placement.transitionZoneId === obj.id) {
-        state.placement.transitionZoneId = null;
-      }
-      await loadFloorContext(state.selected.floorId);
-      dom.planHint.textContent = "Отметка зоны удалена.";
-    };
 
     wrap.append(editBtn, deleteBtn);
     wrap.append(placeBtn);
@@ -291,7 +396,7 @@ function renderObjects() {
 
 /** Цвет маркера по русскому названию типа (без полей в БД). */
 function markerClassByTypeName(obj) {
-  const n = (obj.object_type?.name || "").toLowerCase();
+  const n = (obj.object_kind?.name || obj.object_type?.name || "").toLowerCase();
   if (n.includes("коридор")) return "plan-marker--corridor";
   if (n.includes("лестниц")) return "plan-marker--stair";
   if (n.includes("лифт")) return "plan-marker--lift";
@@ -415,13 +520,13 @@ function getNormalizedImageCoordsFromEvent(event, targetImage) {
 function openEditObjectModal(obj) {
   editingTransitionZoneId = obj.id;
   dom.editObjectName.value = obj.name;
-  dom.editObjectType.innerHTML = "";
-  for (const t of transitionZoneObjectTypes()) {
+  dom.editObjectKind.innerHTML = "";
+  for (const t of transitionZoneKinds()) {
     const opt = document.createElement("option");
     opt.value = t.id;
     opt.textContent = t.name;
-    if (t.id === obj.object_type.id) opt.selected = true;
-    dom.editObjectType.appendChild(opt);
+    if (t.id === obj.object_kind.id) opt.selected = true;
+    dom.editObjectKind.appendChild(opt);
   }
   dom.modalOverlay.hidden = false;
   dom.editObjectName.focus();
@@ -466,9 +571,6 @@ function closeConfirmModal(result = false) {
 }
 
 function askConfirmation({ title, message, okText = "Подтвердить", cancelText = "Закрыть" }) {
-  if (confirmResolver) {
-    closeConfirmModal(false);
-  }
   dom.confirmTitle.textContent = title || "Подтверждение";
   dom.confirmMessage.textContent = message || "";
   dom.confirmOkBtn.textContent = okText;
@@ -478,6 +580,69 @@ function askConfirmation({ title, message, okText = "Подтвердить", ca
   return new Promise((resolve) => {
     confirmResolver = resolve;
   });
+}
+
+function openEntityMetaDialog(ctx) {
+  pendingMetaContext = ctx;
+  dom.entityMetaTitle.textContent = ctx.title || "Дополнительные поля";
+  const isDictNew = ctx.kind === "object_type_new" || ctx.kind === "object_kind_new";
+  if (ctx.kind === "object_type_new") {
+    const n = predictedNextObjectTypeId();
+    dom.entityMetaNumber.value = String(n);
+    dom.entityMetaNumber.title =
+      "Номер совпадает с id записи; до сохранения показано ожидаемое следующее значение.";
+  } else if (ctx.kind === "object_kind_new") {
+    const n = predictedNextObjectKindId();
+    dom.entityMetaNumber.value = String(n);
+    dom.entityMetaNumber.title =
+      "Номер совпадает с id записи; до сохранения показано ожидаемое следующее значение.";
+  } else if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
+    const num = ctx.number != null ? ctx.number : ctx.id;
+    dom.entityMetaNumber.value = num != null ? String(num) : "";
+    dom.entityMetaNumber.title = "Только просмотр, изменить нельзя.";
+  } else {
+    dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
+    dom.entityMetaNumber.title = "";
+  }
+  dom.entityMetaShortName.value = ctx.shortName || "";
+  dom.entityMetaFullName.value = ctx.fullName ?? "";
+  dom.entityMetaDescription.value = ctx.description ?? "";
+  dom.entityMetaAddress.value = "";
+  dom.entityMetaDrawingFile.value = "";
+  const noLoc =
+    ctx.kind === "object_type" ||
+    ctx.kind === "object_kind" ||
+    ctx.kind === "object_type_new" ||
+    ctx.kind === "object_kind_new";
+  dom.entityMetaAddressWrap.hidden = noLoc;
+  dom.entityMetaDrawingWrap.hidden = noLoc;
+  dom.entityMetaOverlay.hidden = false;
+  dom.entityMetaShortName.focus();
+}
+
+function closeEntityMetaDialog() {
+  dom.entityMetaOverlay.hidden = true;
+  pendingMetaContext = null;
+  dom.entityMetaForm.reset();
+}
+
+async function refreshListsAfterMetaCancel(ctx) {
+  if (!ctx) return;
+  if (ctx.kind === "object_type_new") {
+    dom.objectTypeNameInput.value = ctx.shortName || "";
+    return;
+  }
+  if (ctx.kind === "object_kind_new") {
+    dom.objectKindNameInput.value = ctx.shortName || "";
+    return;
+  }
+  if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
+    await loadObjectDictionaries();
+    return;
+  }
+  if (ctx.kind === "transition_zone" && state.selected.floorId) {
+    await loadFloorContext(state.selected.floorId);
+  }
 }
 
 function syncDownloadButton(enabled) {
@@ -545,6 +710,8 @@ async function loadFloorContext(floorId) {
     objects: ctx.objects ?? [],
     transition_zones: ctx.transition_zones ?? [],
   };
+  const floorRow = state.floors.find((f) => f.id === floorId);
+  if (floorRow) floorRow.plan_photo_url = ctx.plan.photo_url ?? null;
 
   if (ctx.plan.photo_url) {
     dom.planImage.src = normalizeImageUrl(ctx.plan.photo_url);
@@ -560,6 +727,7 @@ async function loadFloorContext(floorId) {
 
   renderObjects();
   renderPlanMarkers();
+  syncEntityEditCard();
 }
 
 async function onCampusChange() {
@@ -581,6 +749,7 @@ async function onCampusChange() {
   } else {
     clearPlanView();
   }
+  syncDeleteBranchButton();
 }
 
 async function onBuildingChange() {
@@ -598,6 +767,7 @@ async function onBuildingChange() {
     setMode("building");
     loadEntityImage("building", state.selected.buildingId);
   }
+  syncDeleteBranchButton();
 }
 
 async function onStructureChange() {
@@ -613,6 +783,7 @@ async function onStructureChange() {
     setMode("structure");
     loadEntityImage("structure", state.selected.structureId);
   }
+  syncDeleteBranchButton();
 }
 
 async function onFloorChange() {
@@ -620,16 +791,21 @@ async function onFloorChange() {
   renderPath();
   if (!state.selected.floorId) {
     clearPlanView();
+    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+    setMode("structure");
+    if (state.selected.structureId) loadEntityImage("structure", state.selected.structureId);
+    renderPath();
+    syncDeleteBranchButton();
     return;
   }
 
   dom.pageTitle.textContent = getSelectedName(state.floors, state.selected.floorId);
   setMode("floor");
   await loadFloorContext(state.selected.floorId);
+  syncDeleteBranchButton();
 }
 
 async function loadInitialLists() {
-  setError("");
   state.campuses = await api.getCampuses();
   fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
   fillSelect(dom.buildingSelect, [], "Введите корпус", true);
@@ -641,17 +817,324 @@ async function loadInitialLists() {
   dom.pageTitle.textContent = "Админка";
   setMode("none");
   renderPath();
+  syncDeleteBranchButton();
 }
 
-async function initObjectTypes() {
-  state.objectTypes = await api.getObjectTypes();
-  fillSelect(dom.typeSelect, state.objectTypes, "Тип объекта");
+async function deleteSelectedBranch() {
+  if (!state.selected.campusId) return;
+  if (confirmResolver) return;
+  let branchKind = "campus";
+  if (state.selected.floorId) branchKind = "floor";
+  else if (state.selected.structureId) branchKind = "structure";
+  else if (state.selected.buildingId) branchKind = "building";
+
+  const ok = await askConfirmation({
+    title: "Удаление объекта",
+    message:
+      "При удалении будут удалены выбранный объект, все уровни ниже по дереву и опрос. Удалить или вернуться?",
+    okText: "Удалить",
+    cancelText: "Вернуться",
+  });
+  if (!ok) return;
+
+  if (branchKind === "floor") {
+    await api.deleteFloor(state.selected.floorId);
+    state.selected.floorId = null;
+    clearPlanView();
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+    setMode("structure");
+    loadEntityImage("structure", state.selected.structureId);
+    renderPath();
+    syncDeleteBranchButton();
+    return;
+  }
+  if (branchKind === "structure") {
+    await api.deleteStructure(state.selected.structureId);
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
+    setMode("building");
+    loadEntityImage("building", state.selected.buildingId);
+    renderPath();
+    syncDeleteBranchButton();
+    return;
+  }
+  if (branchKind === "building") {
+    await api.deleteBuilding(state.selected.buildingId);
+    state.selected.buildingId = null;
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    fillSelect(dom.structureSelect, [], "Введите строение", true);
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
+    setMode("campus");
+    loadEntityImage("campus", state.selected.campusId);
+    renderPath();
+    syncDeleteBranchButton();
+    return;
+  }
+  await api.deleteCampus(state.selected.campusId);
+  await loadInitialLists();
+}
+
+function renderObjectTypesDictionary() {
+  dom.objectTypesTbody.innerHTML = "";
+  for (const t of state.objectTypes) {
+    const tr = document.createElement("tr");
+    const nameCell = document.createElement("td");
+    nameCell.textContent = t.name;
+
+    const actionCell = document.createElement("td");
+    const wrap = document.createElement("div");
+    wrap.className = "actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Редактировать";
+    editBtn.onclick = () => {
+      openEntityMetaDialog({
+        kind: "object_type",
+        id: t.id,
+        number: t.number,
+        shortName: t.name,
+        fullName: t.full_name ?? "",
+        description: t.description ?? "",
+        title: "Тип объекта",
+      });
+    };
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Удалить";
+    deleteBtn.onclick = () =>
+      void run(async () => {
+        const ok = await askConfirmation({
+          title: "Удаление типа",
+          message: `Удалить тип «${t.name}»?`,
+          okText: "Удалить",
+          cancelText: "Отмена",
+        });
+        if (!ok) return;
+        await api.deleteObjectType(t.id);
+        await loadObjectDictionaries();
+      });
+
+    wrap.append(editBtn, deleteBtn);
+    actionCell.appendChild(wrap);
+    tr.append(nameCell, actionCell);
+    dom.objectTypesTbody.appendChild(tr);
+  }
+}
+
+function renderObjectKindsDictionary() {
+  dom.objectKindsTbody.innerHTML = "";
+  for (const k of state.objectKinds) {
+    const tr = document.createElement("tr");
+    const typeCell = document.createElement("td");
+    typeCell.textContent = objectTypeNameById(k.object_type_id);
+    const nameCell = document.createElement("td");
+    nameCell.textContent = k.name;
+
+    const actionCell = document.createElement("td");
+    const wrap = document.createElement("div");
+    wrap.className = "actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Редактировать";
+    editBtn.onclick = () => {
+      openEntityMetaDialog({
+        kind: "object_kind",
+        id: k.id,
+        objectTypeId: k.object_type_id,
+        number: k.number,
+        shortName: k.name,
+        fullName: k.full_name ?? "",
+        description: k.description ?? "",
+        title: "Вид объекта",
+      });
+    };
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Удалить";
+    deleteBtn.onclick = () =>
+      void run(async () => {
+        const ok = await askConfirmation({
+          title: "Удаление вида",
+          message: `Удалить вид «${k.name}»?`,
+          okText: "Удалить",
+          cancelText: "Отмена",
+        });
+        if (!ok) return;
+        await api.deleteObjectKind(k.id);
+        await loadObjectDictionaries();
+      });
+    wrap.append(editBtn, deleteBtn);
+    actionCell.appendChild(wrap);
+    tr.append(typeCell, nameCell, actionCell);
+    dom.objectKindsTbody.appendChild(tr);
+  }
+}
+
+function syncKindSelects() {
+  fillSelect(dom.kindSelect, transitionZoneKinds(), "Вид зоны перехода");
+  fillSelect(dom.objectKindTypeSelect, state.objectTypes, "Тип объекта");
+}
+
+async function loadObjectDictionaries() {
+  const [types, kinds] = await Promise.all([api.getObjectTypes(), api.getObjectKinds()]);
+  state.objectTypes = types;
+  state.objectKinds = kinds;
+  syncKindSelects();
+  renderObjectTypesDictionary();
+  renderObjectKindsDictionary();
 }
 
 function nextFloorSortOrder() {
   if (!state.floors.length) return 0;
   return Math.max(...state.floors.map((f) => f.sort_order)) + 1;
 }
+
+/** Ожидаемый следующий id (на бэкенде number выставляется равным id). До сохранения — только подсказка. */
+function predictedNextObjectTypeId() {
+  if (!state.objectTypes.length) return 1;
+  return Math.max(...state.objectTypes.map((t) => t.id)) + 1;
+}
+
+function predictedNextObjectKindId() {
+  if (!state.objectKinds.length) return 1;
+  return Math.max(...state.objectKinds.map((k) => k.id)) + 1;
+}
+
+function entityMetaHasOptionalGaps(kind, full, desc, addr) {
+  if (
+    kind === "object_type" ||
+    kind === "object_kind" ||
+    kind === "object_type_new" ||
+    kind === "object_kind_new"
+  ) {
+    return !full || !desc;
+  }
+  return !full || !desc || !addr;
+}
+
+async function submitEntityMetaDialog(e) {
+  e.preventDefault();
+  if (confirmResolver) return;
+  if (entityMetaSaving) return;
+  if (!pendingMetaContext) return;
+  const ctx = pendingMetaContext;
+  const short = dom.entityMetaShortName.value.trim();
+  if (!short) return;
+  const full = dom.entityMetaFullName.value.trim();
+  const desc = dom.entityMetaDescription.value.trim();
+  const addr = dom.entityMetaAddress.value.trim();
+
+  if (entityMetaHasOptionalGaps(ctx.kind, full, desc, addr)) {
+    entityMetaSaving = true;
+    let ok = false;
+    try {
+      ok = await askConfirmation({
+        title: "Внимание",
+        message:
+          "У вас остались незаполненные поля. Вернитесь к заполнению или сохраните с пустыми полями.",
+        okText: "Сохранить",
+        cancelText: "Вернуться",
+      });
+    } finally {
+      entityMetaSaving = false;
+    }
+    if (!ok) return;
+  }
+
+  entityMetaSaving = true;
+  try {
+  if (ctx.kind === "object_type_new") {
+    await api.createObjectType({
+      name: short,
+      full_name: full || null,
+      description: desc || null,
+    });
+    closeEntityMetaDialog();
+    dom.objectTypeNameInput.value = "";
+    await loadObjectDictionaries();
+    return;
+  }
+  if (ctx.kind === "object_kind_new") {
+    await api.createObjectKind({
+      object_type_id: ctx.objectTypeId,
+      name: short,
+      full_name: full || null,
+      description: desc || null,
+    });
+    closeEntityMetaDialog();
+    dom.objectKindNameInput.value = "";
+    await loadObjectDictionaries();
+    return;
+  }
+
+  const id = ctx.id;
+  const numVal = Number(dom.entityMetaNumber.value) || id;
+
+  if (ctx.kind === "object_type") {
+    await api.updateObjectType(id, {
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+    });
+    closeEntityMetaDialog();
+    await loadObjectDictionaries();
+    return;
+  }
+  if (ctx.kind === "object_kind") {
+    await api.updateObjectKind(id, {
+      object_type_id: ctx.objectTypeId,
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+    });
+    closeEntityMetaDialog();
+    await loadObjectDictionaries();
+    return;
+  }
+  } finally {
+    entityMetaSaving = false;
+  }
+}
+
+dom.entityMetaForm.addEventListener("submit", (e) =>
+  run(async () => {
+    await submitEntityMetaDialog(e);
+  }),
+);
+dom.entityMetaCancelBtn.addEventListener("click", () =>
+  run(async () => {
+    const ctx = pendingMetaContext;
+    closeEntityMetaDialog();
+    await refreshListsAfterMetaCancel(ctx);
+  }),
+);
+dom.entityMetaOverlay.addEventListener("click", (e) => {
+  if (e.target === dom.entityMetaOverlay) {
+    run(async () => {
+      const ctx = pendingMetaContext;
+      closeEntityMetaDialog();
+      await refreshListsAfterMetaCancel(ctx);
+    });
+  }
+});
 
 dom.createCampusForm.addEventListener("submit", (e) =>
   run(async () => {
@@ -722,36 +1205,82 @@ dom.createFloorForm.addEventListener("submit", (e) =>
   }),
 );
 
-dom.renameEntityForm.addEventListener("submit", (e) =>
+dom.objectTypeForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
-    const name = dom.renameEntityInput.value.trim();
+    const name = dom.objectTypeNameInput.value.trim();
     if (!name) return;
+    openEntityMetaDialog({
+      kind: "object_type_new",
+      shortName: name,
+      title: "Тип объекта",
+    });
+  }),
+);
+
+dom.objectKindForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
+    const object_type_id = Number(dom.objectKindTypeSelect.value);
+    const name = dom.objectKindNameInput.value.trim();
+    if (!object_type_id || !name) return;
+    openEntityMetaDialog({
+      kind: "object_kind_new",
+      objectTypeId: object_type_id,
+      shortName: name,
+      title: "Вид объекта",
+    });
+  }),
+);
+
+dom.entityEditForm.addEventListener("submit", (e) =>
+  run(async () => {
+    e.preventDefault();
     const level = getRenameLevel();
+    const short = dom.entityEditShortName.value.trim();
+    if (!short) return;
+    const numTrim = (dom.entityEditNumber.value ?? "").trim();
+    let numberVal = null;
+    if (numTrim !== "") {
+      const n = Number(numTrim);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) return;
+      numberVal = n;
+    }
+    const full = dom.entityEditFullName.value.trim() || null;
+    const desc = dom.entityEditDescription.value.trim() || null;
+    const addr = dom.entityEditAddress.value.trim() || null;
+
+    const payload = {
+      name: short,
+      number: numberVal,
+      full_name: full,
+      description: desc,
+      address: addr,
+    };
     if (level === "campus") {
       const id = state.selected.campusId;
-      await api.updateCampus(id, { name });
+      await api.updateCampus(id, payload);
       state.campuses = await api.getCampuses();
       fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
       dom.campusSelect.value = String(id);
       dom.pageTitle.textContent = getSelectedName(state.campuses, id);
     } else if (level === "building") {
       const bid = state.selected.buildingId;
-      await api.updateBuilding(bid, { name });
+      await api.updateBuilding(bid, payload);
       state.buildings = await api.getBuildings(state.selected.campusId);
       fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
       dom.buildingSelect.value = String(bid);
       dom.pageTitle.textContent = getSelectedName(state.buildings, bid);
     } else if (level === "structure") {
       const sid = state.selected.structureId;
-      await api.updateStructure(sid, { name });
+      await api.updateStructure(sid, payload);
       state.structures = await api.getStructures(state.selected.buildingId);
       fillSelect(dom.structureSelect, state.structures, "Введите строение");
       dom.structureSelect.value = String(sid);
       dom.pageTitle.textContent = getSelectedName(state.structures, sid);
     } else {
       const fid = state.selected.floorId;
-      await api.updateFloor(fid, { name });
+      await api.updateFloor(fid, payload);
       state.floors = await api.getFloors(state.selected.structureId);
       fillSelect(dom.floorSelect, state.floors, "Введите этаж");
       dom.floorSelect.value = String(fid);
@@ -759,7 +1288,7 @@ dom.renameEntityForm.addEventListener("submit", (e) =>
       await loadFloorContext(fid);
     }
     renderPath();
-    syncRenameField();
+    syncEntityEditCard();
   }),
 );
 
@@ -767,10 +1296,10 @@ dom.editObjectForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     if (editingTransitionZoneId == null) return;
-    const object_type_id = Number(dom.editObjectType.value);
+    const object_kind_id = Number(dom.editObjectKind.value);
     const name = dom.editObjectName.value.trim();
-    if (!object_type_id || !name) return;
-    await api.updateTransitionZone(editingTransitionZoneId, { object_type_id, name });
+    if (!object_kind_id || !name) return;
+    await api.updateTransitionZone(editingTransitionZoneId, { object_kind_id, name });
     closeEditObjectModal();
     await loadFloorContext(state.selected.floorId);
   }),
@@ -800,7 +1329,7 @@ dom.imageModalStage.addEventListener("click", (e) =>
     );
     if (!obj) return;
     await api.updateTransitionZone(obj.id, {
-      object_type_id: obj.object_type.id,
+      object_kind_id: obj.object_kind.id,
       name: obj.name,
       pos_x: coords.x,
       pos_y: coords.y,
@@ -827,7 +1356,13 @@ dom.modalOverlay.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!dom.confirmOverlay.hidden) closeConfirmModal(false);
-  else if (!dom.imageModalOverlay.hidden) closeImageModal();
+  else if (!dom.entityMetaOverlay.hidden) {
+    run(async () => {
+      const ctx = pendingMetaContext;
+      closeEntityMetaDialog();
+      await refreshListsAfterMetaCancel(ctx);
+    });
+  } else if (!dom.imageModalOverlay.hidden) closeImageModal();
   else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
 
@@ -854,6 +1389,7 @@ dom.clearBuildingBtn.addEventListener("click", () =>
     setMode("campus");
     loadEntityImage("campus", state.selected.campusId);
     renderPath();
+    syncDeleteBranchButton();
   }),
 );
 dom.clearStructureBtn.addEventListener("click", () =>
@@ -868,6 +1404,7 @@ dom.clearStructureBtn.addEventListener("click", () =>
     setMode("building");
     loadEntityImage("building", state.selected.buildingId);
     renderPath();
+    syncDeleteBranchButton();
   }),
 );
 dom.clearFloorBtn.addEventListener("click", () =>
@@ -880,6 +1417,13 @@ dom.clearFloorBtn.addEventListener("click", () =>
     setMode("structure");
     loadEntityImage("structure", state.selected.structureId);
     renderPath();
+    syncDeleteBranchButton();
+  }),
+);
+
+dom.deleteBranchBtn.addEventListener("click", () =>
+  run(async () => {
+    await deleteSelectedBranch();
   }),
 );
 
@@ -887,24 +1431,21 @@ dom.objectForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     if (!state.selected.planId) return;
-    const object_type_id = Number(dom.typeSelect.value);
+    const object_kind_id = Number(dom.kindSelect.value);
     const name = dom.nameInput.value.trim();
-    if (!object_type_id || !name) return;
+    if (!object_kind_id || !name) return;
     const created = await api.createTransitionZone({
       plan_id: state.selected.planId,
-      object_type_id,
+      object_kind_id,
       name,
     });
     dom.nameInput.value = "";
     await loadFloorContext(state.selected.floorId);
-    const shouldPlaceNow = await askConfirmation({
-      title: "Отметка на плане",
-      message: `Зона «${created.name}» создана. Указать отметку на плане сейчас?`,
-      okText: "Указать",
-      cancelText: "Закрыть",
-    });
-    if (shouldPlaceNow) {
+    if (dom.planImage.getAttribute("src")) {
       startPlacementForTransitionZone(created.id);
+    } else {
+      dom.planHint.textContent =
+        "Зона добавлена. Загрузите изображение плана этажа, чтобы отметить точку на чертеже.";
     }
   }),
 );
@@ -925,6 +1466,7 @@ dom.imageForm.addEventListener("submit", (e) =>
       setEntityPhotoUrl("structure", state.selected.structureId, res?.photo_url);
       dom.imageInput.value = "";
       loadEntityImage("structure", state.selected.structureId);
+      syncEntityEditCard();
       return;
     }
     if (state.selected.buildingId) {
@@ -932,6 +1474,7 @@ dom.imageForm.addEventListener("submit", (e) =>
       setEntityPhotoUrl("building", state.selected.buildingId, res?.photo_url);
       dom.imageInput.value = "";
       loadEntityImage("building", state.selected.buildingId);
+      syncEntityEditCard();
       return;
     }
     if (state.selected.campusId) {
@@ -939,6 +1482,7 @@ dom.imageForm.addEventListener("submit", (e) =>
       setEntityPhotoUrl("campus", state.selected.campusId, res?.photo_url);
       dom.imageInput.value = "";
       loadEntityImage("campus", state.selected.campusId);
+      syncEntityEditCard();
     }
   }),
 );
@@ -954,29 +1498,30 @@ dom.deleteImageBtn.addEventListener("click", () =>
       const res = await api.deleteEntityImage("structure", state.selected.structureId);
       setEntityPhotoUrl("structure", state.selected.structureId, res?.photo_url);
       loadEntityImage("structure", state.selected.structureId);
+      syncEntityEditCard();
       return;
     }
     if (state.selected.buildingId) {
       const res = await api.deleteEntityImage("building", state.selected.buildingId);
       setEntityPhotoUrl("building", state.selected.buildingId, res?.photo_url);
       loadEntityImage("building", state.selected.buildingId);
+      syncEntityEditCard();
       return;
     }
     if (state.selected.campusId) {
       const res = await api.deleteEntityImage("campus", state.selected.campusId);
       setEntityPhotoUrl("campus", state.selected.campusId, res?.photo_url);
       loadEntityImage("campus", state.selected.campusId);
+      syncEntityEditCard();
     }
   }),
 );
 
 async function run(fn) {
   try {
-    setError("");
     await fn();
-  } catch (e) {
-    const msg = String(e.message || e);
-    setError(msg === "Failed to fetch" ? "Нет подключения к API." : msg);
+  } catch {
+    /* сбои сети и API не выводим в интерфейс */
   }
 }
 
@@ -992,7 +1537,7 @@ function initPlanMarkerLayoutListeners() {
 }
 
 run(async () => {
-  await Promise.all([loadInitialLists(), initObjectTypes()]);
+  await Promise.all([loadInitialLists(), loadObjectDictionaries()]);
   initPlanMarkerLayoutListeners();
 });
 

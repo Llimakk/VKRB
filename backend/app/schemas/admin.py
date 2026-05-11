@@ -8,14 +8,23 @@ class CampusCreate(BaseModel):
 
 
 class CampusUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    number: Optional[int] = None
 
 
 class CampusOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     photo_url: Optional[str] = None
+    drawing_url: Optional[str] = None
 
 
 class BuildingCreate(BaseModel):
@@ -24,7 +33,11 @@ class BuildingCreate(BaseModel):
 
 
 class BuildingUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    number: Optional[int] = None
 
 
 class BuildingOut(BaseModel):
@@ -32,7 +45,12 @@ class BuildingOut(BaseModel):
     id: int
     campus_id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     photo_url: Optional[str] = None
+    drawing_url: Optional[str] = None
 
 
 class StructureCreate(BaseModel):
@@ -41,7 +59,11 @@ class StructureCreate(BaseModel):
 
 
 class StructureUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    number: Optional[int] = None
 
 
 class StructureOut(BaseModel):
@@ -49,7 +71,12 @@ class StructureOut(BaseModel):
     id: int
     building_id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     photo_url: Optional[str] = None
+    drawing_url: Optional[str] = None
 
 
 class FloorCreate(BaseModel):
@@ -59,7 +86,11 @@ class FloorCreate(BaseModel):
 
 
 class FloorUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    number: Optional[int] = None
 
 
 class FloorOut(BaseModel):
@@ -68,19 +99,66 @@ class FloorOut(BaseModel):
     structure_id: int
     name: str
     sort_order: int
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     plan_id: Optional[int] = None
     plan_photo_url: Optional[str] = None
+    drawing_url: Optional[str] = None
 
 
 class ObjectTypeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ObjectTypeCreate(BaseModel):
+    name: str
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ObjectTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ObjectKindOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    object_type_id: int
+    name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ObjectKindCreate(BaseModel):
+    object_type_id: int
+    name: str
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ObjectKindUpdate(BaseModel):
+    object_type_id: Optional[int] = None
+    name: Optional[str] = None
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ObjectCreate(BaseModel):
     plan_id: int
     object_type_id: int
+    object_kind_id: int
     name: str
     pos_x: Optional[float] = Field(default=None, ge=0, le=1)
     pos_y: Optional[float] = Field(default=None, ge=0, le=1)
@@ -88,7 +166,12 @@ class ObjectCreate(BaseModel):
 
 class ObjectUpdate(BaseModel):
     object_type_id: int
+    object_kind_id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     pos_x: Optional[float] = Field(default=None, ge=0, le=1)
     pos_y: Optional[float] = Field(default=None, ge=0, le=1)
 
@@ -98,22 +181,32 @@ class ObjectOut(BaseModel):
     id: int
     plan_id: int
     object_type: ObjectTypeOut
+    object_kind: ObjectKindOut
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     pos_x: Optional[float] = None
     pos_y: Optional[float] = None
+    drawing_url: Optional[str] = None
 
 
 class TransitionZoneCreate(BaseModel):
     plan_id: int
-    object_type_id: int
+    object_kind_id: int
     name: str
     pos_x: Optional[float] = Field(default=None, ge=0, le=1)
     pos_y: Optional[float] = Field(default=None, ge=0, le=1)
 
 
 class TransitionZoneUpdate(BaseModel):
-    object_type_id: int
+    object_kind_id: int
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     pos_x: Optional[float] = Field(default=None, ge=0, le=1)
     pos_y: Optional[float] = Field(default=None, ge=0, le=1)
 
@@ -123,7 +216,12 @@ class TransitionZoneOut(BaseModel):
     id: int
     plan_id: int
     object_type: ObjectTypeOut
+    object_kind: ObjectKindOut
     name: str
+    number: Optional[int] = None
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
     pos_x: Optional[float] = None
     pos_y: Optional[float] = None
-
+    drawing_url: Optional[str] = None

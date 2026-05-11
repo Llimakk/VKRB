@@ -18,9 +18,36 @@ body {
   background: #fff;
   border-right: 1px solid #ddd;
   padding: 16px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-content: start;
+  min-height: 100vh;
+}
+
+.sidebar-delete-spacer {
+  flex: 1;
+  min-height: 24px;
+}
+
+.btn-danger-branch {
+  margin-top: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-danger-branch:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-danger-branch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .content {
@@ -46,8 +73,7 @@ body {
   font-size: 1.5rem;
 }
 
-.content-titles .muted,
-.content-titles .error {
+.content-titles .muted {
   margin: 4px 0 0 0;
 }
 
@@ -113,6 +139,29 @@ body {
 
 .objects-card h3 {
   margin: 0 0 10px 0;
+}
+
+.dictionaries-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.dict-block {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.dict-block h4 {
+  margin: 0 0 10px 0;
+}
+
+.dict-block .create-form,
+.dict-block .object-form {
+  margin-bottom: 10px;
 }
 
 label {
@@ -207,16 +256,21 @@ button {
   color: #666;
 }
 
-.error {
-  color: #b00020;
-  min-height: 18px;
-}
-
 .object-form {
   display: grid;
   grid-template-columns: 180px 1fr auto;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.dict-block .object-form {
+  grid-template-columns: 140px 1fr auto;
+}
+
+@media (max-width: 1100px) {
+  .dictionaries-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 table {
@@ -292,31 +346,138 @@ td {
   align-items: center;
 }
 
-.rename-card {
-  flex: 0 1 auto;
-  max-width: min(50%, 420px);
-  width: 100%;
-  margin-bottom: 0;
-  align-self: flex-start;
+.hierarchy-mid-row {
+  display: contents;
 }
 
-.rename-card h4 {
-  margin: 0 0 8px 0;
-  font-size: 1rem;
+.content-grid--split {
+  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.2fr);
+}
+
+.content-grid--split #photoCard {
+  grid-column: 1 / -1;
+}
+
+.content-grid--split #createEntityCard {
+  max-width: 100%;
+}
+
+.content-grid--split #entityEditCard {
+  grid-column: 2;
+}
+
+.content-grid--split #rightCard {
+  display: none !important;
+}
+
+.content-grid--floor {
+  grid-template-columns: 1fr;
+}
+
+.content-grid--dict #entityEditCard {
+  display: none !important;
+}
+
+.entity-edit-card h3 {
+  margin: 0 0 14px 0;
+  font-size: 1.15rem;
   font-weight: 600;
-  color: #333;
+  color: #1a1a1a;
 }
 
-.rename-form {
+.entity-edit-subtitle {
+  margin: 0 0 10px 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #666;
+}
+
+.entity-edit-readonly-block {
+  background: #f4f6f9;
+  border: 1px solid #e8eaef;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.entity-edit-dl {
+  margin: 0;
+}
+
+.entity-edit-dl-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 8px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #e4e7ec;
+  font-size: 13px;
+}
+
+.entity-edit-dl-row:last-child {
+  border-bottom: none;
+}
+
+.entity-edit-dl-row dt {
+  margin: 0;
+  color: #666;
+  font-weight: 500;
+}
+
+.entity-edit-dl-row dd {
+  margin: 0;
+  color: #222;
+  word-break: break-word;
+}
+
+.entity-edit-url {
+  color: #1565c0;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.entity-edit-url:hover {
+  text-decoration: underline;
+}
+
+.entity-edit-fields {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px 14px;
+  align-items: start;
+}
+
+.entity-edit-fields label {
+  margin-top: 6px;
+}
+
+.entity-edit-fields input,
+.entity-edit-fields textarea {
+  width: 100%;
+  max-width: 100%;
+}
+
+.entity-edit-fields textarea {
+  resize: vertical;
+  min-height: 72px;
+  font-family: inherit;
+}
+
+.entity-edit-actions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  justify-content: flex-end;
 }
 
-.rename-form input {
-  flex: 1;
-  min-width: 160px;
+.entity-edit-actions button {
+  min-width: 120px;
+}
+
+.req {
+  color: #c62828;
 }
 
 .modal-overlay {
@@ -328,6 +489,11 @@ td {
   justify-content: center;
   z-index: 1000;
   padding: 16px;
+}
+
+/* Подтверждения (в т.ч. поверх формы реквизитов и других модалок с тем же классом). */
+#confirmOverlay {
+  z-index: 2000;
 }
 
 .modal-overlay[hidden] {
@@ -365,6 +531,18 @@ td {
 .modal-form select,
 .modal-form input {
   width: 100%;
+}
+
+.entity-meta-dialog {
+  max-width: 480px;
+}
+
+.entity-meta-form textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px;
 }
 
 .confirm-dialog {
