@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
-from app.models import Building, Campus, Floor, Object, Plan, Structure
+from app.models import Building, Campus, Floor, Object, Plan, Structure, TransitionZone
 from app.services.minio_service import (
     delete_object,
     effective_photo_url,
@@ -111,6 +111,13 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
         .order_by(Object.object_type_id, Object.name)
         .all()
     )
+    transition_zones = (
+        db.query(TransitionZone)
+        .filter(TransitionZone.plan_id == plan_id)
+        .options(joinedload(TransitionZone.object_type))
+        .order_by(TransitionZone.object_type_id, TransitionZone.name)
+        .all()
+    )
 
     return {
         "plan": {
@@ -131,6 +138,16 @@ def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):
             }
             for o in objects
         ],
+        "transition_zones": [
+            {
+                "id": z.id,
+                "name": z.name,
+                "object_type": {"id": z.object_type.id, "name": z.object_type.name},
+                "pos_x": z.pos_x,
+                "pos_y": z.pos_y,
+            }
+            for z in transition_zones
+        ],
     }
 
 
@@ -147,8 +164,24 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
         .order_by(Object.object_type_id, Object.name)
         .all()
     )
+    transition_zones = (
+        db.query(TransitionZone)
+        .filter(TransitionZone.plan_id == plan.id)
+        .options(joinedload(TransitionZone.object_type))
+        .order_by(TransitionZone.object_type_id, TransitionZone.name)
+        .all()
+    )
 
     photo_url = effective_photo_url(plan.photo_url, plan.minio_object_key)
+
+    def _zone_dict(z: TransitionZone) -> dict:
+        return {
+            "id": z.id,
+            "name": z.name,
+            "object_type": {"id": z.object_type.id, "name": z.object_type.name},
+            "pos_x": z.pos_x,
+            "pos_y": z.pos_y,
+        }
 
     return {
         "floor_id": floor_id,
@@ -169,6 +202,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
             }
             for o in objects
         ],
+        "transition_zones": [_zone_dict(z) for z in transition_zones],
     }
 
 

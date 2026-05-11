@@ -18,33 +18,9 @@ body {
   background: #fff;
   border-right: 1px solid #ddd;
   padding: 16px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
-  min-height: 100vh;
-}
-
-.cascade-delete-panel {
-  margin-top: auto;
-  align-self: flex-end;
-  text-align: right;
-  max-width: 100%;
-}
-
-.cascade-delete-label {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.btn-danger {
-  background: #c62828;
-  color: #fff;
-  border: 1px solid #b71c1c;
-}
-
-.btn-danger:hover {
-  background: #b71c1c;
+  align-content: start;
 }
 
 .content {
@@ -132,8 +108,7 @@ body {
 
 .objects-card {
   max-width: 100%;
-  width: fit-content;
-  overflow-x: auto;
+  width: 100%;
 }
 
 .objects-card h3 {
@@ -193,8 +168,24 @@ button {
   cursor: pointer;
 }
 
+.plan-marker--corridor {
+  background: #7b1fa2;
+}
+
+.plan-marker--stair {
+  background: #ef6c00;
+}
+
+.plan-marker--lift {
+  background: #00897b;
+}
+
+.plan-marker--room {
+  background: #1976d2;
+}
+
 .plan-marker.is-selected {
-  background: #d32f2f;
+  background: #d32f2f !important;
 }
 
 .actions button.is-active {
@@ -204,6 +195,12 @@ button {
 
 #photoBlock {
   margin-top: 4px;
+}
+
+.plan-marker-legend {
+  margin: 8px 0 6px 0;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .muted {
@@ -223,12 +220,8 @@ button {
 }
 
 table {
+  width: 100%;
   border-collapse: collapse;
-}
-
-.objects-card table {
-  width: max-content;
-  max-width: 100%;
 }
 
 th,
@@ -288,14 +281,8 @@ td {
 
 .actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
-}
-
-.actions button {
-  white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 .create-form {

@@ -6,5 +6,6 @@ from .models import (  # noqa: F401
     Plan,
     ObjectType,
     Object,
+    TransitionZone,
 )
 

@@ -4,12 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.models import Building, Campus, Floor, Structure, Plan
-from app.services.location_cascade_delete import (
-    delete_building_subtree,
-    delete_campus_subtree,
-    delete_structure_subtree,
-    purge_floor_plan_and_objects,
-)
 from app.services.minio_service import effective_photo_url
 from app.schemas.admin import (
     BuildingCreate,
@@ -76,8 +70,10 @@ def update_campus(campus_id: int, payload: CampusUpdate, db: Session = Depends(g
 
 @router.delete("/campuses/{campus_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campus(campus_id: int, db: Session = Depends(get_db)):
-    if not delete_campus_subtree(db, campus_id):
+    campus = db.query(Campus).filter(Campus.id == campus_id).one_or_none()
+    if not campus:
         raise HTTPException(status_code=404, detail="Campus not found")
+    db.delete(campus)
     try:
         db.commit()
     except IntegrityError as e:
@@ -143,8 +139,10 @@ def update_building(building_id: int, payload: BuildingUpdate, db: Session = Dep
 
 @router.delete("/buildings/{building_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_building(building_id: int, db: Session = Depends(get_db)):
-    if not delete_building_subtree(db, building_id):
+    building = db.query(Building).filter(Building.id == building_id).one_or_none()
+    if not building:
         raise HTTPException(status_code=404, detail="Building not found")
+    db.delete(building)
     try:
         db.commit()
     except IntegrityError as e:
@@ -207,8 +205,10 @@ def update_structure(structure_id: int, payload: StructureUpdate, db: Session = 
 
 @router.delete("/structures/{structure_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_structure(structure_id: int, db: Session = Depends(get_db)):
-    if not delete_structure_subtree(db, structure_id):
+    structure = db.query(Structure).filter(Structure.id == structure_id).one_or_none()
+    if not structure:
         raise HTTPException(status_code=404, detail="Structure not found")
+    db.delete(structure)
     try:
         db.commit()
     except IntegrityError as e:
@@ -302,8 +302,10 @@ def update_floor(floor_id: int, payload: FloorUpdate, db: Session = Depends(get_
 
 @router.delete("/floors/{floor_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_floor(floor_id: int, db: Session = Depends(get_db)):
-    if not purge_floor_plan_and_objects(db, floor_id):
+    floor = db.query(Floor).filter(Floor.id == floor_id).one_or_none()
+    if not floor:
         raise HTTPException(status_code=404, detail="Floor not found")
+    db.delete(floor)
     try:
         db.commit()
     except IntegrityError as e:

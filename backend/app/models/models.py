@@ -80,6 +80,9 @@ class Plan(Base):
 
     floor: Mapped["Floor"] = relationship(back_populates="plan")
     objects: Mapped[list["Object"]] = relationship(back_populates="plan", cascade="save-update", passive_deletes=True)
+    transition_zones: Mapped[list["TransitionZone"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class ObjectType(Base):
@@ -89,6 +92,28 @@ class ObjectType(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
 
     objects: Mapped[list["Object"]] = relationship(back_populates="object_type", cascade="all, delete-orphan")
+    transition_zones: Mapped[list["TransitionZone"]] = relationship(back_populates="object_type")
+
+
+class TransitionZone(Base):
+    __tablename__ = "transition_zone"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id", ondelete="CASCADE"), nullable=False)
+    object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="RESTRICT"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    plan: Mapped["Plan"] = relationship(back_populates="transition_zones")
+    object_type: Mapped["ObjectType"] = relationship(back_populates="transition_zones")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "object_type_id", "name", name="uq_transition_zone_plan_type_name"),
+    )
 
 
 class Object(Base):

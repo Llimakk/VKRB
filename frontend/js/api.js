@@ -1,6 +1,6 @@
 import { API_BASE } from "./config.js";
 
-const API_BASES = Array.from(new Set([API_BASE, "http://localhost:8000", "http://127.0.0.1:8000"]));
+const API_BASES = Array.from(new Set([API_BASE, "http://127.0.0.1:8000", "http://localhost:8000"]));
 
 async function request(path, options = {}) {
   let lastNetworkError = null;
@@ -75,10 +75,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
-  deleteCampus: (id) => request(`/admin/campuses/${id}`, { method: "DELETE" }),
-  deleteBuilding: (id) => request(`/admin/buildings/${id}`, { method: "DELETE" }),
-  deleteStructure: (id) => request(`/admin/structures/${id}`, { method: "DELETE" }),
-  deleteFloor: (id) => request(`/admin/floors/${id}`, { method: "DELETE" }),
   getBuildings: (campusId) => request(`/admin/buildings?campus_id=${campusId}`),
   getStructures: (buildingId) => request(`/admin/structures?building_id=${buildingId}`),
   getFloors: (structureId) => request(`/admin/floors?structure_id=${structureId}`),
@@ -105,6 +101,19 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   deleteObject: (id) => request(`/admin/objects/${id}`, { method: "DELETE" }),
+  createTransitionZone: (payload) =>
+    request("/admin/transition-zones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  updateTransitionZone: (id, payload) =>
+    request(`/admin/transition-zones/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteTransitionZone: (id) => request(`/admin/transition-zones/${id}`, { method: "DELETE" }),
   uploadPlanImage: async (planId, file) => {
     const fd = new FormData();
     fd.append("file", file);

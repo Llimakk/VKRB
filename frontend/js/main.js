@@ -16,9 +16,9 @@ const state = {
   },
   planDetail: null,
   placement: {
-    objectId: null,
+    transitionZoneId: null,
   },
-  focusedObjectId: null,
+  focusedTransitionZoneId: null,
 };
 
 function getSelectedName(items, id) {
@@ -32,71 +32,21 @@ function renderPath() {
   const floor = getSelectedName(state.floors, state.selected.floorId);
   if (!state.selected.campusId) {
     dom.pathText.textContent = "Выберите кампус.";
-    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.campusId && !state.selected.buildingId) {
     dom.pathText.textContent = campus;
-    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.buildingId && !state.selected.structureId) {
     dom.pathText.textContent = `${campus} / ${building}`;
-    syncCascadeDeletePanel();
     return;
   }
   if (state.selected.structureId && !state.selected.floorId) {
     dom.pathText.textContent = `${campus} / ${building} / ${structure}`;
-    syncCascadeDeletePanel();
     return;
   }
   dom.pathText.textContent = `${campus} / ${building} / ${structure} / ${floor}`;
-  syncCascadeDeletePanel();
-}
-
-const CASCADE_WARNINGS = {
-  campus:
-    "Будут безвозвратно удалены весь выбранный кампус, все корпуса (здания), строения, этажи, планы этажей, все помещения (объекты) на планах и загруженные изображения.",
-  building:
-    "Будут безвозвратно удалены выбранный корпус, все строения и этажи в нём, планы этажей, все помещения на планах и связанные изображения.",
-  structure:
-    "Будут безвозвратно удалены выбранное строение, все этажи в нём, планы, все помещения на планах и связанные изображения.",
-  floor:
-    "Будут безвозвратно удалены выбранный этаж, план этажа, все помещения на плане и файл изображения плана.",
-};
-
-function getCascadeDeleteTarget() {
-  if (!state.selected.campusId) return null;
-  if (state.selected.floorId) {
-    return {
-      level: "floor",
-      id: state.selected.floorId,
-      name: getSelectedName(state.floors, state.selected.floorId),
-    };
-  }
-  if (state.selected.structureId) {
-    return {
-      level: "structure",
-      id: state.selected.structureId,
-      name: getSelectedName(state.structures, state.selected.structureId),
-    };
-  }
-  if (state.selected.buildingId) {
-    return {
-      level: "building",
-      id: state.selected.buildingId,
-      name: getSelectedName(state.buildings, state.selected.buildingId),
-    };
-  }
-  return {
-    level: "campus",
-    id: state.selected.campusId,
-    name: getSelectedName(state.campuses, state.selected.campusId),
-  };
-}
-
-function syncCascadeDeletePanel() {
-  dom.cascadeDeletePanel.hidden = !state.selected.campusId;
 }
 
 function clearPlanView() {
@@ -106,13 +56,13 @@ function clearPlanView() {
   syncDownloadButton(false);
   dom.objectsTbody.innerHTML = "";
   dom.planMarkers.innerHTML = "";
-  state.placement.objectId = null;
-  state.focusedObjectId = null;
+  state.placement.transitionZoneId = null;
+  state.focusedTransitionZoneId = null;
   state.planDetail = null;
   state.selected.planId = null;
 }
 
-let editingObjectId = null;
+let editingTransitionZoneId = null;
 let confirmResolver = null;
 
 const CREATE_LABELS = {
@@ -179,6 +129,7 @@ function applyCreateFormsVisibility(mode) {
 function setMode(mode) {
   if (mode === "none") {
     dom.photoCard.style.display = "none";
+    dom.planMarkerLegend.hidden = true;
     dom.createEntityCard.style.display = "block";
     dom.rightCard.style.display = "none";
     dom.emptyStateText.style.display = "block";
@@ -192,7 +143,8 @@ function setMode(mode) {
   dom.createEntityCard.style.display = mode === "floor" ? "none" : "block";
   if (mode === "floor") {
     dom.photoCardTitle.textContent = "План";
-    dom.rightCardTitle.textContent = "Объекты";
+    dom.planMarkerLegend.hidden = false;
+    dom.rightCardTitle.textContent = "Зоны перехода";
     dom.rightCard.style.display = "block";
     dom.objectForm.style.display = "grid";
     dom.emptyStateText.style.display = "none";
@@ -200,6 +152,7 @@ function setMode(mode) {
     syncRenameField();
     return;
   }
+  dom.planMarkerLegend.hidden = true;
   dom.photoCardTitle.textContent = "Фото";
   dom.rightCardTitle.textContent = "";
   dom.rightCard.style.display = "none";
@@ -241,13 +194,28 @@ function loadEntityImage(modelName, id) {
   }
 }
 
+/** Типы зон перехода (согласовано с API): коридор, лестница, лифт, переход. */
+function isTransitionZoneTypeName(name) {
+  const n = (name || "").toLowerCase();
+  return (
+    n.includes("коридор") ||
+    n.includes("лестниц") ||
+    n.includes("лифт") ||
+    n.includes("переход")
+  );
+}
+
+function transitionZoneObjectTypes() {
+  return state.objectTypes.filter((t) => isTransitionZoneTypeName(t.name));
+}
+
 function renderObjects() {
-  const objects = state.planDetail?.objects || [];
+  const zones = state.planDetail?.transition_zones || [];
   dom.objectsTbody.innerHTML = "";
-  for (const obj of objects) {
+  for (const obj of zones) {
     const tr = document.createElement("tr");
-    tr.dataset.objectId = String(obj.id);
-    if (state.focusedObjectId === obj.id) {
+    tr.dataset.transitionZoneId = String(obj.id);
+    if (state.focusedTransitionZoneId === obj.id) {
       tr.classList.add("object-row-selected");
     }
 
@@ -278,38 +246,38 @@ function renderObjects() {
     deleteBtn.textContent = "Удалить";
     deleteBtn.onclick = async () => {
       const confirmed = await askConfirmation({
-        title: "Удаление объекта",
-        message: `Удалить объект "${obj.name}"?`,
+        title: "Удаление зоны перехода",
+        message: `Удалить зону «${obj.name}»?`,
         okText: "Удалить",
         cancelText: "Отмена",
       });
       if (!confirmed) return;
-      await api.deleteObject(obj.id);
+      await api.deleteTransitionZone(obj.id);
       await loadFloorContext(state.selected.floorId);
     };
 
     const placeBtn = document.createElement("button");
     placeBtn.type = "button";
     placeBtn.textContent = obj.pos_x != null && obj.pos_y != null ? "Переставить на плане" : "Указать на плане";
-    placeBtn.className = state.placement.objectId === obj.id ? "is-active" : "";
-    placeBtn.onclick = () => startPlacementForObject(obj.id);
+    placeBtn.className = state.placement.transitionZoneId === obj.id ? "is-active" : "";
+    placeBtn.onclick = () => startPlacementForTransitionZone(obj.id);
 
     const clearMarkBtn = document.createElement("button");
     clearMarkBtn.type = "button";
     clearMarkBtn.textContent = "Удалить отметку на плане";
     clearMarkBtn.disabled = obj.pos_x == null || obj.pos_y == null;
     clearMarkBtn.onclick = async () => {
-      await api.updateObject(obj.id, {
+      await api.updateTransitionZone(obj.id, {
         object_type_id: obj.object_type.id,
         name: obj.name,
         pos_x: null,
         pos_y: null,
       });
-      if (state.placement.objectId === obj.id) {
-        state.placement.objectId = null;
+      if (state.placement.transitionZoneId === obj.id) {
+        state.placement.transitionZoneId = null;
       }
       await loadFloorContext(state.selected.floorId);
-      dom.planHint.textContent = "Отметка объекта удалена.";
+      dom.planHint.textContent = "Отметка зоны удалена.";
     };
 
     wrap.append(editBtn, deleteBtn);
@@ -319,6 +287,15 @@ function renderObjects() {
     tr.append(markCell, typeCell, nameCell, actionCell);
     dom.objectsTbody.appendChild(tr);
   }
+}
+
+/** Цвет маркера по русскому названию типа (без полей в БД). */
+function markerClassByTypeName(obj) {
+  const n = (obj.object_type?.name || "").toLowerCase();
+  if (n.includes("коридор")) return "plan-marker--corridor";
+  if (n.includes("лестниц")) return "plan-marker--stair";
+  if (n.includes("лифт")) return "plan-marker--lift";
+  return "plan-marker--room";
 }
 
 /** Pixel box of the bitmap as laid out with object-fit:contain inside the img element. */
@@ -340,15 +317,17 @@ function getObjectFitContainMetrics(img) {
   return { elW, elH, offX, offY, dispW, dispH };
 }
 
-function renderPlanMarkersIn(container, imgEl, selectedObjectId = null) {
+function renderPlanMarkersIn(container, imgEl, selectedTransitionZoneId = null) {
   container.innerHTML = "";
-  const objects = state.planDetail?.objects || [];
+  const zones = state.planDetail?.transition_zones || [];
   const m = getObjectFitContainMetrics(imgEl);
-  for (const obj of objects) {
+  for (const obj of zones) {
     if (obj.pos_x == null || obj.pos_y == null) continue;
     const marker = document.createElement("button");
     marker.type = "button";
-    marker.className = `plan-marker${selectedObjectId === obj.id ? " is-selected" : ""}`;
+    marker.className = `plan-marker ${markerClassByTypeName(obj)}${
+      selectedTransitionZoneId === obj.id ? " is-selected" : ""
+    }`;
     if (m) {
       const leftPct = ((m.offX + obj.pos_x * m.dispW) / m.elW) * 100;
       const topPct = ((m.offY + obj.pos_y * m.dispH) / m.elH) * 100;
@@ -363,11 +342,11 @@ function renderPlanMarkersIn(container, imgEl, selectedObjectId = null) {
     marker.style.pointerEvents = "auto";
     marker.onclick = (e) => {
       e.stopPropagation();
-      if (state.placement.objectId != null) {
-        startPlacementForObject(obj.id);
+      if (state.placement.transitionZoneId != null) {
+        startPlacementForTransitionZone(obj.id);
         return;
       }
-      focusObjectInList(obj.id);
+      focusTransitionZoneInList(obj.id);
     };
     container.appendChild(marker);
   }
@@ -379,7 +358,7 @@ function renderPlanMarkers() {
     dom.planImage.style.display !== "none" &&
     dom.planImage.getAttribute("src")
   ) {
-    renderPlanMarkersIn(dom.planMarkers, dom.planImage, state.placement.objectId);
+    renderPlanMarkersIn(dom.planMarkers, dom.planImage, state.placement.transitionZoneId);
   } else {
     dom.planMarkers.innerHTML = "";
   }
@@ -388,33 +367,33 @@ function renderPlanMarkers() {
     !dom.imageModalOverlay.hidden &&
     dom.imageModalImg.getAttribute("src")
   ) {
-    renderPlanMarkersIn(dom.imageModalMarkers, dom.imageModalImg, state.placement.objectId);
+    renderPlanMarkersIn(dom.imageModalMarkers, dom.imageModalImg, state.placement.transitionZoneId);
   }
 }
 
-function startPlacementForObject(objectId) {
+function startPlacementForTransitionZone(zoneId) {
   if (!state.selected.floorId || !dom.planImage.getAttribute("src")) return;
-  state.placement.objectId = objectId;
-  const obj = (state.planDetail?.objects || []).find((x) => x.id === objectId);
-  const objectName = obj?.name || "объект";
-  dom.planHint.textContent = `Режим установки точки: ${objectName}. Кликните по месту аудитории на плане.`;
+  state.placement.transitionZoneId = zoneId;
+  const obj = (state.planDetail?.transition_zones || []).find((x) => x.id === zoneId);
+  const zoneName = obj?.name || "зона";
+  dom.planHint.textContent = `Режим установки точки: ${zoneName}. Кликните по зоне на плане.`;
   openImageModal(dom.planImage.getAttribute("src"), {
     placementMode: true,
-    objectName,
+    objectName: zoneName,
   });
   renderObjects();
   renderPlanMarkers();
 }
 
-function focusObjectInList(objectId) {
-  state.focusedObjectId = objectId;
+function focusTransitionZoneInList(zoneId) {
+  state.focusedTransitionZoneId = zoneId;
   if (!dom.imageModalOverlay.hidden) {
     closeImageModal();
   } else {
     renderPlanMarkers();
   }
   renderObjects();
-  const row = dom.objectsTbody.querySelector(`tr[data-object-id="${objectId}"]`);
+  const row = dom.objectsTbody.querySelector(`tr[data-transition-zone-id="${zoneId}"]`);
   if (row) {
     row.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -434,10 +413,10 @@ function getNormalizedImageCoordsFromEvent(event, targetImage) {
 }
 
 function openEditObjectModal(obj) {
-  editingObjectId = obj.id;
+  editingTransitionZoneId = obj.id;
   dom.editObjectName.value = obj.name;
   dom.editObjectType.innerHTML = "";
-  for (const t of state.objectTypes) {
+  for (const t of transitionZoneObjectTypes()) {
     const opt = document.createElement("option");
     opt.value = t.id;
     opt.textContent = t.name;
@@ -450,7 +429,7 @@ function openEditObjectModal(obj) {
 
 function closeEditObjectModal() {
   dom.modalOverlay.hidden = true;
-  editingObjectId = null;
+  editingTransitionZoneId = null;
 }
 
 function openImageModal(src, options = {}) {
@@ -465,8 +444,8 @@ function openImageModal(src, options = {}) {
 }
 
 function closeImageModal() {
-  if (state.placement.objectId != null) {
-    state.placement.objectId = null;
+  if (state.placement.transitionZoneId != null) {
+    state.placement.transitionZoneId = null;
     dom.planHint.textContent = "Установка точки отменена.";
     renderObjects();
     renderPlanMarkers();
@@ -499,80 +478,6 @@ function askConfirmation({ title, message, okText = "Подтвердить", ca
   return new Promise((resolve) => {
     confirmResolver = resolve;
   });
-}
-
-async function performCascadeDelete() {
-  const target = getCascadeDeleteTarget();
-  if (!target) return;
-
-  const step1 = await askConfirmation({
-    title: "Опасное действие",
-    message: CASCADE_WARNINGS[target.level],
-    okText: "Продолжить",
-    cancelText: "Отмена",
-  });
-  if (!step1) return;
-
-  const step2 = await askConfirmation({
-    title: "Подтвердите удаление",
-    message: `Удалить «${target.name}» без возможности восстановления?`,
-    okText: "Удалить",
-    cancelText: "Отмена",
-  });
-  if (!step2) return;
-
-  if (!dom.imageModalOverlay.hidden) closeImageModal();
-
-  if (target.level === "campus") {
-    await api.deleteCampus(target.id);
-    await loadInitialLists();
-    return;
-  }
-
-  if (target.level === "building") {
-    await api.deleteBuilding(target.id);
-    state.selected.buildingId = null;
-    state.selected.structureId = null;
-    state.selected.floorId = null;
-    clearPlanView();
-    state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-    fillSelect(dom.structureSelect, [], "Введите строение", true);
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
-    setMode("campus");
-    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
-    loadEntityImage("campus", state.selected.campusId);
-    renderPath();
-    syncRenameField();
-    return;
-  }
-
-  if (target.level === "structure") {
-    await api.deleteStructure(target.id);
-    state.selected.structureId = null;
-    state.selected.floorId = null;
-    clearPlanView();
-    state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
-    setMode("building");
-    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
-    loadEntityImage("building", state.selected.buildingId);
-    renderPath();
-    syncRenameField();
-    return;
-  }
-
-  await api.deleteFloor(target.id);
-  state.selected.floorId = null;
-  clearPlanView();
-  state.floors = await api.getFloors(state.selected.structureId);
-  fillSelect(dom.floorSelect, state.floors, "Введите этаж");
-  setMode("structure");
-  dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
-  loadEntityImage("structure", state.selected.structureId);
-  renderPath();
-  syncRenameField();
 }
 
 function syncDownloadButton(enabled) {
@@ -635,7 +540,11 @@ async function downloadCurrentPhoto() {
 async function loadFloorContext(floorId) {
   const ctx = await api.getFloorContext(floorId);
   state.selected.planId = ctx.plan.id;
-  state.planDetail = { plan: ctx.plan, objects: ctx.objects };
+  state.planDetail = {
+    plan: ctx.plan,
+    objects: ctx.objects ?? [],
+    transition_zones: ctx.transition_zones ?? [],
+  };
 
   if (ctx.plan.photo_url) {
     dom.planImage.src = normalizeImageUrl(ctx.plan.photo_url);
@@ -857,11 +766,11 @@ dom.renameEntityForm.addEventListener("submit", (e) =>
 dom.editObjectForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
-    if (editingObjectId == null) return;
+    if (editingTransitionZoneId == null) return;
     const object_type_id = Number(dom.editObjectType.value);
     const name = dom.editObjectName.value.trim();
     if (!object_type_id || !name) return;
-    await api.updateObject(editingObjectId, { object_type_id, name });
+    await api.updateTransitionZone(editingTransitionZoneId, { object_type_id, name });
     closeEditObjectModal();
     await loadFloorContext(state.selected.floorId);
   }),
@@ -883,21 +792,23 @@ dom.planImage.addEventListener("click", () => {
 
 dom.imageModalStage.addEventListener("click", (e) =>
   run(async () => {
-    if (state.placement.objectId == null) return;
+    if (state.placement.transitionZoneId == null) return;
     const coords = getNormalizedImageCoordsFromEvent(e, dom.imageModalImg);
     if (!coords) return;
-    const obj = (state.planDetail?.objects || []).find((x) => x.id === state.placement.objectId);
+    const obj = (state.planDetail?.transition_zones || []).find(
+      (x) => x.id === state.placement.transitionZoneId,
+    );
     if (!obj) return;
-    await api.updateObject(obj.id, {
+    await api.updateTransitionZone(obj.id, {
       object_type_id: obj.object_type.id,
       name: obj.name,
       pos_x: coords.x,
       pos_y: coords.y,
     });
-    state.placement.objectId = null;
+    state.placement.transitionZoneId = null;
     closeImageModal();
     await loadFloorContext(state.selected.floorId);
-    dom.planHint.textContent = "Точка объекта сохранена.";
+    dom.planHint.textContent = "Точка зоны сохранена.";
   }),
 );
 
@@ -919,8 +830,6 @@ document.addEventListener("keydown", (e) => {
   else if (!dom.imageModalOverlay.hidden) closeImageModal();
   else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
-
-dom.cascadeDeleteBtn.addEventListener("click", () => run(performCascadeDelete));
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));
 dom.buildingSelect.addEventListener("change", () => run(onBuildingChange));
@@ -981,17 +890,21 @@ dom.objectForm.addEventListener("submit", (e) =>
     const object_type_id = Number(dom.typeSelect.value);
     const name = dom.nameInput.value.trim();
     if (!object_type_id || !name) return;
-    const created = await api.createObject({ plan_id: state.selected.planId, object_type_id, name });
+    const created = await api.createTransitionZone({
+      plan_id: state.selected.planId,
+      object_type_id,
+      name,
+    });
     dom.nameInput.value = "";
     await loadFloorContext(state.selected.floorId);
     const shouldPlaceNow = await askConfirmation({
       title: "Отметка на плане",
-      message: `Объект "${created.name}" создан. Указать отметку на плане сейчас?`,
+      message: `Зона «${created.name}» создана. Указать отметку на плане сейчас?`,
       okText: "Указать",
       cancelText: "Закрыть",
     });
     if (shouldPlaceNow) {
-      startPlacementForObject(created.id);
+      startPlacementForTransitionZone(created.id);
     }
   }),
 );

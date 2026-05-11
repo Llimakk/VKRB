@@ -102,3 +102,28 @@ class ObjectOut(BaseModel):
     pos_x: Optional[float] = None
     pos_y: Optional[float] = None
 
+
+class TransitionZoneCreate(BaseModel):
+    plan_id: int
+    object_type_id: int
+    name: str
+    pos_x: Optional[float] = Field(default=None, ge=0, le=1)
+    pos_y: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+class TransitionZoneUpdate(BaseModel):
+    object_type_id: int
+    name: str
+    pos_x: Optional[float] = Field(default=None, ge=0, le=1)
+    pos_y: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+class TransitionZoneOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    plan_id: int
+    object_type: ObjectTypeOut
+    name: str
+    pos_x: Optional[float] = None
+    pos_y: Optional[float] = None
+
