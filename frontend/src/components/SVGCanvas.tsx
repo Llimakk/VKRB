@@ -85,12 +85,15 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
   const getSVGCoords = (e: React.MouseEvent): { x: number; y: number } => {
     if (!svgRef.current) return { x: 0, y: 0 };
-    const svg = svgRef.current;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const cursorPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    return { x: cursorPt.x, y: cursorPt.y };
+    // Using getBoundingClientRect rather than getScreenCTM — bbox reliably includes
+    // every CSS transform applied to ancestors (pan translate, zoom scale).
+    const rect = svgRef.current.getBoundingClientRect();
+    const sx = rect.width  > 0 ? svgWidth  / rect.width  : 1;
+    const sy = rect.height > 0 ? svgHeight / rect.height : 1;
+    return {
+      x: (e.clientX - rect.left) * sx,
+      y: (e.clientY - rect.top)  * sy,
+    };
   };
 
   // ---- SVG-level handlers ----
