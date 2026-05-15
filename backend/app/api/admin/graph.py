@@ -398,6 +398,13 @@ def save_plan_graph(plan_id: int, payload: PlanGraphIn, db: Session = Depends(ge
                     db.add(ObjectEntryNode(object_id=obj.id, nav_node_id=db_node_id))
                     seen_entry.add(db_node_id)
 
+    # 6. Delete objects on this plan that are no longer bound to a polygon
+    listed_ids = {op.object_id for op in (payload.object_polygons or [])}
+    q = db.query(Object).filter(Object.plan_id == plan_id)
+    if listed_ids:
+        q = q.filter(~Object.id.in_(listed_ids))
+    q.delete(synchronize_session=False)
+
     db.commit()
     db.refresh(plan)
     return _build_graph_out(plan, db)

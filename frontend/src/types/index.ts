@@ -138,6 +138,7 @@ export interface EditorState {
   floorName: string;                     // used by suggestNodeName to extract floor number
   autoBindOnMatch: boolean;              // auto-create object and bind nav-node when name matches
   autoConnectCorridor: boolean;          // auto-connect new corridor node to the previous one
+  autoLinkCorridorToNonCorridor: boolean; // auto-connect new corridor node to the nearest non-corridor point
   lastCorridorNodeId: string | null;     // id of the last placed corridor node (for auto-connect chain)
 
   mode: EditorMode;

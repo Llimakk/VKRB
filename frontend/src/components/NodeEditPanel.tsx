@@ -77,8 +77,12 @@ export function NodeEditPanel({ point, onClose }: Props) {
               <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 2 }}>Широта</div>
               <input
                 value={lat}
-                onChange={e => setLat(e.target.value)}
-                placeholder="55.7654"
+                onChange={e => {
+                  const v = e.target.value;
+                  const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+                  if (m) { setLat(m[1]); setLon(m[2]); } else { setLat(v); }
+                }}
+                placeholder="55.7654 или 55.7654, 37.6842"
                 style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #D1D5DB', borderRadius: 6, boxSizing: 'border-box' }}
               />
             </div>
@@ -86,7 +90,11 @@ export function NodeEditPanel({ point, onClose }: Props) {
               <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 2 }}>Долгота</div>
               <input
                 value={lon}
-                onChange={e => setLon(e.target.value)}
+                onChange={e => {
+                  const v = e.target.value;
+                  const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+                  if (m) { setLat(m[1]); setLon(m[2]); } else { setLon(v); }
+                }}
                 placeholder="37.6842"
                 style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #D1D5DB', borderRadius: 6, boxSizing: 'border-box' }}
               />

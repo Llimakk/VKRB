@@ -47,6 +47,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     setBindingPolygonIndex,
     toggleEntryNode,
     autoConnectCorridor,
+    autoLinkCorridorToNonCorridor,
     lastCorridorNodeId,
     setLastCorridorNodeId,
   } = store;
@@ -58,6 +59,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // Edit mode drag state — polygon vertices
   const [draggingVertex, setDraggingVertex] = useState<{ polyIdx: number; vtxIdx: number } | null>(null);
+  const draggingVertexRef = useRef<{ polyIdx: number; vtxIdx: number } | null>(null);
   const isDragging = useRef(false);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
 
@@ -124,6 +126,23 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
         }
         setLastCorridorNodeId(newNode.id);
       }
+      if (autoLinkCorridorToNonCorridor && nodeTypeToCreate === 'corridor') {
+        const newPoints = useEditorStore.getState().points;
+        const newNode = newPoints[newPoints.length - 1];
+        const nonCorridors = newPoints.filter(
+          p => p.id !== newNode.id && p.node_type !== 'corridor'
+        );
+        if (nonCorridors.length > 0) {
+          let nearest = nonCorridors[0];
+          let nearestDist = Math.hypot(nearest.x - newNode.x, nearest.y - newNode.y);
+          for (let i = 1; i < nonCorridors.length; i++) {
+            const p = nonCorridors[i];
+            const d = Math.hypot(p.x - newNode.x, p.y - newNode.y);
+            if (d < nearestDist) { nearest = p; nearestDist = d; }
+          }
+          addConnection(newNode.id, nearest.id);
+        }
+      }
     } else if (mode === 'polygon') {
       if (isNearFirst && polygonPoints.length >= 3) {
         let name = '';
@@ -165,12 +184,9 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       }
     }
 
-    if (draggingVertex !== null && mode === 'edit') {
-      const origin = dragOrigin.current;
-      if (origin && Math.hypot(x - origin.x, y - origin.y) >= DRAG_THRESHOLD) {
-        isDragging.current = true;
-        movePolygonVertex(draggingVertex.polyIdx, draggingVertex.vtxIdx, { x, y });
-      }
+    if (draggingVertexRef.current !== null && mode === 'edit') {
+      isDragging.current = true;
+      movePolygonVertex(draggingVertexRef.current.polyIdx, draggingVertexRef.current.vtxIdx, { x, y });
     }
 
     if (mode === 'polygon' && polygonPoints.length >= 3) {
@@ -182,15 +198,35 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   };
 
   const stopDrag = () => {
-    if (draggingId !== null || draggingVertex !== null) {
+    if (draggingId !== null || draggingVertexRef.current !== null) {
       store.saveHistory();
       setDraggingId(null);
       setDraggingVertex(null);
+      draggingVertexRef.current = null;
       setTimeout(() => { isDragging.current = false; }, 0);
     }
   };
 
   // ---- Point handlers ----
+
+  const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (mode !== 'edit') return;
+    const { x, y } = getSVGCoords(e);
+    const HIT = (settings.polygonVertexRadius + 8);
+    for (let pi = 0; pi < polygons.length; pi++) {
+      const poly = polygons[pi];
+      for (let vi = 0; vi < poly.points.length; vi++) {
+        const pt = poly.points[vi];
+        if (Math.hypot(x - pt.x, y - pt.y) <= HIT) {
+          isDragging.current = false;
+          dragOrigin.current = { x, y };
+          draggingVertexRef.current = { polyIdx: pi, vtxIdx: vi };
+          setDraggingVertex({ polyIdx: pi, vtxIdx: vi });
+          return;
+        }
+      }
+    }
+  };
 
   const handlePointMouseDown = (e: React.MouseEvent, id: string) => {
     if (mode !== 'edit') return;
@@ -277,6 +313,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       height={svgHeight}
       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       onClick={handleSVGClick}
+      onMouseDown={handleSVGMouseDown}
       onMouseMove={handleSVGMouseMove}
       onMouseUp={stopDrag}
       onMouseLeave={stopDrag}
@@ -341,12 +378,6 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
                 r={settings.polygonVertexRadius + (editable ? 2 : 0)}
                 fill={settings.polygonVertexColor}
                 cursor={editable ? (draggingVertex?.polyIdx === idx && draggingVertex?.vtxIdx === pidx ? 'grabbing' : 'grab') : 'default'}
-                onMouseDown={editable ? (e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  isDragging.current = false;
-                  setDraggingVertex({ polyIdx: idx, vtxIdx: pidx });
-                } : undefined}
               />
             ))}
           </g>
@@ -421,6 +452,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       {/* Binding lines: polygon centroid → entry nav-nodes */}
       {polygons.map((poly, idx) => {
         if (!poly.nav_node_client_ids?.length) return null;
+        if (poly.points.length === 0) return null;
         const cx = poly.points.reduce((s, p) => s + p.x, 0) / poly.points.length;
         const cy = poly.points.reduce((s, p) => s + p.y, 0) / poly.points.length;
         const isSelected = mode === 'bind' && bindingPolygonIndex === idx;

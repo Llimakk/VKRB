@@ -213,6 +213,7 @@ export const ModeSelector: React.FC = () => {
     autoConnectRoomsToCorridor,
     autoBindOnMatch, setAutoBindOnMatch,
     autoConnectCorridor, setAutoConnectCorridor,
+    autoLinkCorridorToNonCorridor, setAutoLinkCorridorToNonCorridor,
   } = useEditorStore();
 
   const handleFinishPolygon = () => {
@@ -319,14 +320,20 @@ export const ModeSelector: React.FC = () => {
         <>
           {divider}
 
-          {/* Auto-corridor toggle */}
+          {/* Auto-corridor toggles */}
           {nodeTypeToCreate === 'corridor' && (
-            <div style={{ padding: '2px 8px 4px' }}>
+            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <Toggle
                 checked={autoConnectCorridor}
                 onChange={setAutoConnectCorridor}
                 label="Авто-цепь"
                 title="Автоматически соединять коридорные узлы в цепочку"
+              />
+              <Toggle
+                checked={autoLinkCorridorToNonCorridor}
+                onChange={setAutoLinkCorridorToNonCorridor}
+                label="Связь с некор."
+                title="Автоматически соединять новый коридорный узел с ближайшим некоридорным"
               />
             </div>
           )}

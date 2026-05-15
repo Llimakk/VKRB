@@ -97,6 +97,7 @@ interface EditorStore extends EditorState {
   setPendingPolygon: (data: PendingPolygon | null) => void;
   setAutoBindOnMatch: (v: boolean) => void;
   setAutoConnectCorridor: (v: boolean) => void;
+  setAutoLinkCorridorToNonCorridor: (v: boolean) => void;
   setLastCorridorNodeId: (id: string | null) => void;
 
   // Finalize drawn polygon → opens binding dialog
@@ -129,6 +130,7 @@ const createInitialState = (): EditorState => ({
   nodeTypeToCreate: 'room',
   autoBindOnMatch: true,
   autoConnectCorridor: true,
+  autoLinkCorridorToNonCorridor: false,
   lastCorridorNodeId: null,
   pendingPolygon: null,
   bindingPolygonIndex: null,
@@ -295,6 +297,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   setPendingPolygon: (data) => set({ pendingPolygon: data }),
   setAutoBindOnMatch: (v) => set({ autoBindOnMatch: v }),
   setAutoConnectCorridor: (v) => set({ autoConnectCorridor: v }),
+  setAutoLinkCorridorToNonCorridor: (v) => set({ autoLinkCorridorToNonCorridor: v }),
   setLastCorridorNodeId: (id) => set({ lastCorridorNodeId: id }),
   setBindingPolygonIndex: (index) => set({ bindingPolygonIndex: index }),
   toggleEntryNode: (polygonIndex, nodeId) => {

@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     first_name: str
     last_name: str
     email: str
+    avoid_stairs: bool
     created_at: datetime
 
 
@@ -34,6 +35,7 @@ class UpdateProfileRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    avoid_stairs: Optional[bool] = None
 
 
 class ChangePasswordRequest(BaseModel):

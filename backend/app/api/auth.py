@@ -60,6 +60,8 @@ def update_me(
         current_user.last_name = payload.last_name.strip()
     if payload.email is not None:
         current_user.email = payload.email.lower().strip()
+    if payload.avoid_stairs is not None:
+        current_user.avoid_stairs = payload.avoid_stairs
     try:
         db.commit()
     except IntegrityError:

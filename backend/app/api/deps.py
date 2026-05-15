@@ -8,7 +8,7 @@ from app.services.auth_service import decode_access_token
 
 _bearer = HTTPBearer(auto_error=False)
 
-__all__ = ["get_db", "get_current_user"]
+__all__ = ["get_db", "get_current_user", "get_optional_user"]
 
 
 def get_current_user(
@@ -36,3 +36,16 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return User if a valid Bearer token is provided, else None. Never raises."""
+    if credentials is None:
+        return None
+    user_id = decode_access_token(credentials.credentials)
+    if user_id is None:
+        return None
+    return db.query(User).filter(User.id == user_id).one_or_none()

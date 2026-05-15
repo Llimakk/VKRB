@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
 from app.models import Building, Campus, Floor, Object, Plan, Structure
+from app.services.image_service import optimize_plan_image
 from app.services.minio_service import (
     delete_object,
     effective_photo_url,
@@ -186,6 +187,7 @@ async def replace_plan_image(
         raise HTTPException(status_code=400, detail="Empty file")
 
     content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/jpeg"
+    content, content_type = optimize_plan_image(content, content_type)
     new_key = plan_object_key(plan_id, file.filename or "plan.jpg")
 
     if plan.minio_object_key:

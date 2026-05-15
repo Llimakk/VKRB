@@ -204,7 +204,8 @@ def _load_graph(
             lat1, lon1 = math.radians(a.lat), math.radians(a.lon)
             lat2, lon2 = math.radians(b.lat), math.radians(b.lon)
             dlat, dlon = lat2 - lat1, lon2 - lon1
-            ha = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            ha = math.sin(dlat / 2) ** 2 + math.cos(lat1) * \
+                math.cos(lat2) * math.sin(dlon / 2) ** 2
             gps_dist = 6_371_000 * 2 * math.asin(math.sqrt(ha))
             cost = gps_dist
             adjacency[a.id].append((b.id, cost))
@@ -614,9 +615,14 @@ def _build_steps(
         # ── Exit ──────────────────────────────────────────────────────────────
         if node.node_type == "exit":
             name = node.name or ""
+            entering = prev_node is not None and prev_node.lat is not None
+            if entering:
+                instr = f"Войдите в здание через {name}" if name else "Войдите в здание"
+            else:
+                instr = f"Выйдите на улицу через {name}" if name else "Выйдите на улицу"
             result.append(RouteStepData(
                 step=step_num,
-                instruction=f"Выйдите из здания {name}".strip(),
+                instruction=instr,
                 direction=DIR_EXIT,
                 distance_m=round(cost_forward, 1),
                 node_id=node.id, node_type=node.node_type, node_name=node.name,
@@ -711,13 +717,20 @@ def _plan_meta(db: Session, plan_ids: set[int]) -> dict[int, _PlanMeta]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+STAIRS_AVOID_PENALTY = 100_000.0
+
+
 def compute_route(
     db: Session,
     from_object_id: int,
     to_object_id: int,
+    avoid_stairs: bool = False,
 ) -> RouteData:
     """
     Raises ValueError if objects or their nav_nodes are missing, or no path exists.
+
+    avoid_stairs: when True, edges touching stairs nodes are heavily penalized,
+    so Dijkstra prefers elevators / level transitions when an alternative exists.
     """
     if not db.query(Object).filter(Object.id == from_object_id).one_or_none():
         raise ValueError(f"Object {from_object_id} not found")
@@ -736,6 +749,15 @@ def compute_route(
         raise ValueError(f"Object {to_object_id} has no entry nodes assigned")
 
     adjacency, nodes, edge_costs = _load_graph(db)
+
+    if avoid_stairs:
+        stairs_ids = {nid for nid, n in nodes.items() if n.node_type == "stairs"}
+        if stairs_ids:
+            for nid, neighbors in adjacency.items():
+                adjacency[nid] = [
+                    (v, w + STAIRS_AVOID_PENALTY if (nid in stairs_ids or v in stairs_ids) else w)
+                    for v, w in neighbors
+                ]
 
     starts = [s for s in starts if s in nodes]
     ends = [e for e in ends if e in nodes]

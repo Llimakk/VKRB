@@ -1,10 +1,11 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_db
-from app.models import Building, Campus, Floor, NavNode, Object, ObjectEntryNode, Plan, Structure
+from app.api.deps import get_db, get_optional_user
+from app.models import Building, Campus, Floor, NavNode, Object, ObjectEntryNode, Plan, Structure, User
 from app.schemas.mobile import (
     MobileBuildingItem,
     MobileCampusItem,
@@ -105,7 +106,16 @@ def search_objects(
             .filter(NavNode.node_type == node_type)
             .distinct()
         )
-    objects = query.order_by(Object.name).limit(100).all()
+    if q:
+        relevance = case(
+            (Object.name.ilike(q), 0),
+            (Object.name.ilike(f"{q}%"), 1),
+            else_=2,
+        )
+        query = query.order_by(relevance, Object.name)
+    else:
+        query = query.order_by(Object.name)
+    objects = query.limit(100).all()
 
     results = []
     for o in objects:
@@ -279,9 +289,18 @@ def get_floor_plan(floor_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/route", response_model=RouteResponse)
-def build_route(payload: RouteRequest, db: Session = Depends(get_db)):
+def build_route(
+    payload: RouteRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     try:
-        route = compute_route(db, payload.from_object_id, payload.to_object_id)
+        route = compute_route(
+            db,
+            payload.from_object_id,
+            payload.to_object_id,
+            avoid_stairs=bool(user and user.avoid_stairs),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
