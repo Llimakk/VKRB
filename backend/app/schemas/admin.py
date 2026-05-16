@@ -157,6 +157,7 @@ class ObjectKindUpdate(BaseModel):
 
 class ObjectCreate(BaseModel):
     plan_id: int
+    transition_zone_id: int
     object_type_id: int
     object_kind_id: int
     name: str
@@ -165,6 +166,7 @@ class ObjectCreate(BaseModel):
 
 
 class ObjectUpdate(BaseModel):
+    transition_zone_id: int
     object_type_id: int
     object_kind_id: int
     name: str
@@ -180,6 +182,7 @@ class ObjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     plan_id: int
+    transition_zone_id: Optional[int] = None
     object_type: ObjectTypeOut
     object_kind: ObjectKindOut
     name: str

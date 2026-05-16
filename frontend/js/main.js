@@ -18,8 +18,14 @@ const state = {
   planDetail: null,
   placement: {
     transitionZoneId: null,
+    objectId: null,
   },
   focusedTransitionZoneId: null,
+  focusedObjectId: null,
+  /** @type {Record<number, number>} corridor id -> selected room object id */
+  corridorSelectedRoomId: {},
+  /** corridor id with open inline «add room» form */
+  corridorAddRoomOpenId: null,
   /** @type {"none"|"campus"|"building"|"structure"|"floor"} */
   uiMode: "none",
 };
@@ -64,7 +70,11 @@ function clearPlanView() {
   dom.objectsTbody.innerHTML = "";
   dom.planMarkers.innerHTML = "";
   state.placement.transitionZoneId = null;
+  state.placement.objectId = null;
   state.focusedTransitionZoneId = null;
+  state.focusedObjectId = null;
+  state.corridorSelectedRoomId = {};
+  state.corridorAddRoomOpenId = null;
   state.planDetail = null;
   state.selected.planId = null;
 }
@@ -336,6 +346,68 @@ function objectTypeNameById(id) {
   return state.objectTypes.find((t) => t.id === id)?.name || "—";
 }
 
+function isCorridorZone(zone) {
+  return (zone.object_kind?.name || "").toLowerCase().includes("коридор");
+}
+
+function isHierarchyObjectTypeName(name) {
+  const n = (name || "").toLowerCase();
+  return (
+    n.includes("кампус") ||
+    n.includes("корпус") ||
+    n.includes("строен") ||
+    n.includes("этаж")
+  );
+}
+
+/** Типы справочника «Помещение» (не зона перехода, не иерархия). */
+function isRoomObjectTypeName(name) {
+  const n = (name || "").toLowerCase().trim();
+  if (isTransitionZoneTypeName(name) || isHierarchyObjectTypeName(name)) return false;
+  return n.includes("помещен") || n === "room";
+}
+
+function roomObjectTypeIds() {
+  const ids = state.objectTypes.filter((t) => isRoomObjectTypeName(t.name)).map((t) => t.id);
+  if (ids.length) return new Set(ids);
+  return new Set(
+    state.objectTypes
+      .filter((t) => !isTransitionZoneTypeName(t.name) && !isHierarchyObjectTypeName(t.name))
+      .map((t) => t.id),
+  );
+}
+
+function roomKinds() {
+  const typeIds = roomObjectTypeIds();
+  return state.objectKinds.filter((k) => typeIds.has(k.object_type_id));
+}
+
+function roomsForCorridor(corridorId) {
+  return (state.planDetail?.objects || []).filter((o) => o.transition_zone_id === corridorId);
+}
+
+function findRoomById(roomId) {
+  return (state.planDetail?.objects || []).find((o) => o.id === roomId);
+}
+
+function getSelectedRoomIdForCorridor(corridorId) {
+  const rooms = roomsForCorridor(corridorId);
+  const stored = state.corridorSelectedRoomId[corridorId];
+  if (stored && rooms.some((r) => r.id === stored)) return stored;
+  return null;
+}
+
+/** Подпись в закрытом select; в развёрнутом списке не показывается (hidden). */
+function appendSelectPlaceholder(select, text, { selected = true } = {}) {
+  const opt = document.createElement("option");
+  opt.value = "";
+  opt.textContent = text;
+  opt.disabled = true;
+  opt.hidden = true;
+  if (selected) opt.selected = true;
+  select.appendChild(opt);
+}
+
 function renderObjects() {
   const zones = state.planDetail?.transition_zones || [];
   dom.objectsTbody.innerHTML = "";
@@ -373,14 +445,19 @@ function renderObjects() {
     deleteBtn.textContent = "Удалить";
     deleteBtn.onclick = () =>
       void run(async () => {
+        const roomCount = roomsForCorridor(obj.id).length;
+        const roomNote = roomCount
+          ? ` Также будут удалены ${roomCount} помещений.`
+          : "";
         const confirmed = await askConfirmation({
           title: "Удаление зоны перехода",
-          message: `Удалить зону «${obj.name}»?`,
+          message: `Удалить зону «${obj.name}»?${roomNote}`,
           okText: "Удалить",
           cancelText: "Отмена",
         });
         if (!confirmed) return;
         await api.deleteTransitionZone(obj.id);
+        delete state.corridorSelectedRoomId[obj.id];
         await loadFloorContext(state.selected.floorId);
       });
 
@@ -415,7 +492,268 @@ function renderObjects() {
     actionCell.appendChild(wrap);
     tr.append(markCell, typeCell, nameCell, actionCell);
     dom.objectsTbody.appendChild(tr);
+
+    if (isCorridorZone(obj)) {
+      dom.objectsTbody.appendChild(buildCorridorRoomsRow(obj));
+    }
   }
+}
+
+function buildCorridorRoomsRow(corridor) {
+  const tr = document.createElement("tr");
+  tr.className = "corridor-rooms-row";
+  tr.dataset.corridorId = String(corridor.id);
+
+  const rooms = roomsForCorridor(corridor.id);
+  const selectedRoomId = getSelectedRoomIdForCorridor(corridor.id);
+  if (selectedRoomId) state.corridorSelectedRoomId[corridor.id] = selectedRoomId;
+  const selRoom = selectedRoomId ? findRoomById(selectedRoomId) : null;
+  const td = document.createElement("td");
+  td.colSpan = 4;
+
+  const panel = document.createElement("div");
+  panel.className = "corridor-rooms-panel";
+
+  const header = document.createElement("div");
+  header.className = "corridor-rooms-header";
+
+  const badge = document.createElement("span");
+  badge.className = "corridor-rooms-badge";
+  badge.textContent = "Помещения";
+
+  const count = document.createElement("span");
+  count.className = "corridor-rooms-count";
+  count.textContent = String(rooms.length);
+
+  const body = document.createElement("div");
+  body.className = "corridor-rooms-body";
+
+  const picker = document.createElement("div");
+  picker.className = "corridor-rooms-picker";
+
+  const pickerLabel = document.createElement("label");
+  pickerLabel.className = "corridor-rooms-picker-label";
+  pickerLabel.textContent = "Список";
+
+  const select = document.createElement("select");
+  select.className = "corridor-rooms-select";
+  select.id = `corridor-room-select-${corridor.id}`;
+  pickerLabel.htmlFor = select.id;
+
+  if (!rooms.length) {
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "Пока нет помещений";
+    emptyOpt.selected = true;
+    select.appendChild(emptyOpt);
+  } else {
+    appendSelectPlaceholder(select, "Выберите помещение", {
+      selected: selectedRoomId == null,
+    });
+    for (const room of rooms) {
+      const opt = document.createElement("option");
+      opt.value = String(room.id);
+      const kindName = room.object_kind?.name || "—";
+      opt.textContent = `${kindName} · ${room.name}`;
+      if (room.id === selectedRoomId) opt.selected = true;
+      select.appendChild(opt);
+    }
+  }
+  select.onchange = () => {
+    const id = Number(select.value) || null;
+    if (id) {
+      state.corridorSelectedRoomId[corridor.id] = id;
+      focusRoomInCorridor(corridor.id, id);
+    }
+  };
+
+  select.disabled = !rooms.length;
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "corridor-btn corridor-btn--accent";
+  addBtn.textContent =
+    state.corridorAddRoomOpenId === corridor.id ? "Скрыть" : "+ Помещение";
+  addBtn.onclick = () => {
+    state.corridorAddRoomOpenId =
+      state.corridorAddRoomOpenId === corridor.id ? null : corridor.id;
+    renderObjects();
+  };
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "corridor-rooms-title-wrap";
+  titleWrap.append(badge, count);
+  header.append(titleWrap, addBtn);
+
+  const actions = document.createElement("div");
+  actions.className = "corridor-rooms-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "corridor-btn";
+  editBtn.textContent = "Карточка";
+  editBtn.disabled = !selectedRoomId;
+  editBtn.onclick = () => {
+    const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
+    if (room) openRoomMetaDialog(room, { corridorId: corridor.id });
+  };
+
+  const placeBtn = document.createElement("button");
+  placeBtn.type = "button";
+  placeBtn.className = `corridor-btn${state.placement.objectId === selectedRoomId ? " is-active" : ""}`;
+  placeBtn.textContent =
+    selRoom?.pos_x != null && selRoom?.pos_y != null ? "На плане ✓" : "Отметить";
+  placeBtn.disabled = !selectedRoomId;
+  placeBtn.onclick = () => {
+    const rid = getSelectedRoomIdForCorridor(corridor.id);
+    if (rid) startPlacementForObject(rid);
+  };
+
+  const clearMarkBtn = document.createElement("button");
+  clearMarkBtn.type = "button";
+  clearMarkBtn.className = "corridor-btn corridor-btn--ghost";
+  clearMarkBtn.textContent = "Снять отметку";
+  clearMarkBtn.disabled = !selRoom || selRoom.pos_x == null || selRoom.pos_y == null;
+  clearMarkBtn.onclick = () =>
+    void run(async () => {
+      const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
+      if (!room) return;
+      await api.updateObject(room.id, {
+        transition_zone_id: room.transition_zone_id,
+        object_type_id: room.object_type.id,
+        object_kind_id: room.object_kind.id,
+        name: room.name,
+        pos_x: null,
+        pos_y: null,
+      });
+      if (state.placement.objectId === room.id) state.placement.objectId = null;
+      await loadFloorContext(state.selected.floorId);
+      dom.planHint.textContent = "Отметка помещения удалена.";
+    });
+
+  const deleteRoomBtn = document.createElement("button");
+  deleteRoomBtn.type = "button";
+  deleteRoomBtn.className = "corridor-btn corridor-btn--danger";
+  deleteRoomBtn.textContent = "Удалить";
+  deleteRoomBtn.disabled = !selectedRoomId;
+  deleteRoomBtn.onclick = () =>
+    void run(async () => {
+      const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
+      if (!room) return;
+      const confirmed = await askConfirmation({
+        title: "Удаление помещения",
+        message: `Удалить помещение «${room.name}»?`,
+        okText: "Удалить",
+        cancelText: "Отмена",
+      });
+      if (!confirmed) return;
+      await api.deleteObject(room.id);
+      delete state.corridorSelectedRoomId[corridor.id];
+      await loadFloorContext(state.selected.floorId);
+    });
+
+  picker.append(pickerLabel, select);
+  actions.append(editBtn, placeBtn, clearMarkBtn, deleteRoomBtn);
+  body.append(picker, actions);
+  panel.append(header, body);
+
+  if (state.corridorAddRoomOpenId === corridor.id) {
+    const addCard = document.createElement("div");
+    addCard.className = "corridor-room-add-card";
+
+    const addTitle = document.createElement("p");
+    addTitle.className = "corridor-room-add-title";
+    addTitle.textContent = "Новое помещение";
+
+    const addForm = document.createElement("div");
+    addForm.className = "corridor-room-add-form";
+
+    const kindField = document.createElement("div");
+    kindField.className = "corridor-room-field";
+    const kindLabel = document.createElement("label");
+    kindLabel.textContent = "Вид";
+    const kindSelect = document.createElement("select");
+    kindSelect.required = true;
+    const kinds = roomKinds();
+    if (!kinds.length) {
+      kindSelect.disabled = true;
+      appendSelectPlaceholder(
+        kindSelect,
+        "Добавьте виды к типу «Помещение» в справочнике",
+      );
+    } else {
+      appendSelectPlaceholder(kindSelect, "Выберите вид");
+    }
+    for (const k of kinds) {
+      const opt = document.createElement("option");
+      opt.value = String(k.id);
+      opt.textContent = k.name;
+      kindSelect.appendChild(opt);
+    }
+    kindField.append(kindLabel, kindSelect);
+
+    const nameField = document.createElement("div");
+    nameField.className = "corridor-room-field";
+    const nameLabel = document.createElement("label");
+    nameLabel.textContent = "Название";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.placeholder = "Введите наименование";
+    nameInput.autocomplete = "off";
+    nameInput.required = true;
+    nameField.append(nameLabel, nameInput);
+
+    const addActions = document.createElement("div");
+    addActions.className = "corridor-room-add-actions";
+
+    const createBtn = document.createElement("button");
+    createBtn.type = "button";
+    createBtn.className = "corridor-btn corridor-btn--accent";
+    createBtn.textContent = "Создать";
+    createBtn.disabled = !kinds.length;
+    createBtn.onclick = () =>
+      void run(async () => {
+        const object_kind_id = Number(kindSelect.value);
+        const name = nameInput.value.trim();
+        if (!object_kind_id || !name || !state.selected.planId) return;
+        const kind = state.objectKinds.find((k) => k.id === object_kind_id);
+        if (!kind) return;
+        const created = await api.createObject({
+          plan_id: state.selected.planId,
+          transition_zone_id: corridor.id,
+          object_type_id: kind.object_type_id,
+          object_kind_id,
+          name,
+        });
+        state.corridorAddRoomOpenId = null;
+        state.corridorSelectedRoomId[corridor.id] = created.id;
+        const startPlacement = !!dom.planImage.getAttribute("src");
+        await loadFloorContext(state.selected.floorId);
+        openRoomMetaDialog(created, {
+          corridorId: corridor.id,
+          isNewCreate: true,
+          startPlacementAfterSave: startPlacement,
+        });
+      });
+
+    const cancelAddBtn = document.createElement("button");
+    cancelAddBtn.type = "button";
+    cancelAddBtn.className = "corridor-btn corridor-btn--ghost";
+    cancelAddBtn.textContent = "Отмена";
+    cancelAddBtn.onclick = () => {
+      state.corridorAddRoomOpenId = null;
+      renderObjects();
+    };
+
+    addActions.append(createBtn, cancelAddBtn);
+    addForm.append(kindField, nameField, addActions);
+    addCard.append(addTitle, addForm);
+    panel.appendChild(addCard);
+  }
+
+  td.appendChild(panel);
+  tr.appendChild(td);
+  return tr;
 }
 
 /** Цвет маркера по русскому названию типа (без полей в БД). */
@@ -446,38 +784,73 @@ function getObjectFitContainMetrics(img) {
   return { elW, elH, offX, offY, dispW, dispH };
 }
 
-function renderPlanMarkersIn(container, imgEl, selectedTransitionZoneId = null) {
+function appendPlanMarker(container, imgEl, m, item, className, title, onClick) {
+  if (item.pos_x == null || item.pos_y == null) return;
+  const marker = document.createElement("button");
+  marker.type = "button";
+  marker.className = `plan-marker ${className}`;
+  if (m) {
+    const leftPct = ((m.offX + item.pos_x * m.dispW) / m.elW) * 100;
+    const topPct = ((m.offY + item.pos_y * m.dispH) / m.elH) * 100;
+    marker.style.left = `${leftPct}%`;
+    marker.style.top = `${topPct}%`;
+  } else {
+    marker.style.left = `${item.pos_x * 100}%`;
+    marker.style.top = `${item.pos_y * 100}%`;
+  }
+  marker.title = title;
+  marker.setAttribute("aria-label", title);
+  marker.style.pointerEvents = "auto";
+  marker.onclick = onClick;
+  container.appendChild(marker);
+}
+
+function renderPlanMarkersIn(container, imgEl) {
   container.innerHTML = "";
   const zones = state.planDetail?.transition_zones || [];
+  const rooms = state.planDetail?.objects || [];
   const m = getObjectFitContainMetrics(imgEl);
+
   for (const obj of zones) {
-    if (obj.pos_x == null || obj.pos_y == null) continue;
-    const marker = document.createElement("button");
-    marker.type = "button";
-    marker.className = `plan-marker ${markerClassByTypeName(obj)}${
-      selectedTransitionZoneId === obj.id ? " is-selected" : ""
-    }`;
-    if (m) {
-      const leftPct = ((m.offX + obj.pos_x * m.dispW) / m.elW) * 100;
-      const topPct = ((m.offY + obj.pos_y * m.dispH) / m.elH) * 100;
-      marker.style.left = `${leftPct}%`;
-      marker.style.top = `${topPct}%`;
-    } else {
-      marker.style.left = `${obj.pos_x * 100}%`;
-      marker.style.top = `${obj.pos_y * 100}%`;
-    }
-    marker.title = `${obj.object_type.name}: ${obj.name}`;
-    marker.setAttribute("aria-label", marker.title);
-    marker.style.pointerEvents = "auto";
-    marker.onclick = (e) => {
-      e.stopPropagation();
-      if (state.placement.transitionZoneId != null) {
-        startPlacementForTransitionZone(obj.id);
-        return;
-      }
-      focusTransitionZoneInList(obj.id);
-    };
-    container.appendChild(marker);
+    appendPlanMarker(
+      container,
+      imgEl,
+      m,
+      obj,
+      markerClassByTypeName(obj),
+      `${obj.object_type.name}: ${obj.name}`,
+      (e) => {
+        e.stopPropagation();
+        if (state.placement.transitionZoneId != null) {
+          startPlacementForTransitionZone(obj.id);
+          return;
+        }
+        if (state.placement.objectId != null) return;
+        focusTransitionZoneInList(obj.id);
+      },
+    );
+  }
+
+  for (const room of rooms) {
+    if (room.transition_zone_id == null) continue;
+    const kindName = room.object_kind?.name || "Помещение";
+    appendPlanMarker(
+      container,
+      imgEl,
+      m,
+      room,
+      "plan-marker--room",
+      `${kindName}: ${room.name}`,
+      (e) => {
+        e.stopPropagation();
+        if (state.placement.objectId != null) {
+          startPlacementForObject(room.id);
+          return;
+        }
+        if (state.placement.transitionZoneId != null) return;
+        focusRoomInCorridor(room.transition_zone_id, room.id);
+      },
+    );
   }
 }
 
@@ -487,7 +860,7 @@ function renderPlanMarkers() {
     dom.planImage.style.display !== "none" &&
     dom.planImage.getAttribute("src")
   ) {
-    renderPlanMarkersIn(dom.planMarkers, dom.planImage, state.placement.transitionZoneId);
+    renderPlanMarkersIn(dom.planMarkers, dom.planImage);
   } else {
     dom.planMarkers.innerHTML = "";
   }
@@ -496,13 +869,14 @@ function renderPlanMarkers() {
     !dom.imageModalOverlay.hidden &&
     dom.imageModalImg.getAttribute("src")
   ) {
-    renderPlanMarkersIn(dom.imageModalMarkers, dom.imageModalImg, state.placement.transitionZoneId);
+    renderPlanMarkersIn(dom.imageModalMarkers, dom.imageModalImg);
   }
 }
 
 function startPlacementForTransitionZone(zoneId) {
   if (!state.selected.floorId || !dom.planImage.getAttribute("src")) return;
   state.placement.transitionZoneId = zoneId;
+  state.placement.objectId = null;
   const obj = (state.planDetail?.transition_zones || []).find((x) => x.id === zoneId);
   const zoneName = obj?.name || "зона";
   dom.planHint.textContent = `Режим установки точки: ${zoneName}. Кликните по зоне на плане.`;
@@ -512,6 +886,35 @@ function startPlacementForTransitionZone(zoneId) {
   });
   renderObjects();
   renderPlanMarkers();
+}
+
+function startPlacementForObject(objectId) {
+  if (!state.selected.floorId || !dom.planImage.getAttribute("src")) return;
+  state.placement.objectId = objectId;
+  state.placement.transitionZoneId = null;
+  const room = findRoomById(objectId);
+  const roomName = room?.name || "помещение";
+  dom.planHint.textContent = `Режим установки точки: ${roomName}. Кликните по плану.`;
+  openImageModal(dom.planImage.getAttribute("src"), {
+    placementMode: true,
+    objectName: roomName,
+  });
+  renderObjects();
+  renderPlanMarkers();
+}
+
+function focusRoomInCorridor(corridorId, roomId) {
+  state.focusedObjectId = roomId;
+  state.focusedTransitionZoneId = null;
+  state.corridorSelectedRoomId[corridorId] = roomId;
+  if (!dom.imageModalOverlay.hidden) {
+    closeImageModal();
+  } else {
+    renderPlanMarkers();
+  }
+  renderObjects();
+  const subRow = dom.objectsTbody.querySelector(`tr.corridor-rooms-row[data-corridor-id="${corridorId}"]`);
+  if (subRow) subRow.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function focusTransitionZoneInList(zoneId) {
@@ -539,6 +942,24 @@ function getNormalizedImageCoordsFromEvent(event, targetImage) {
   const nx = Math.max(0, Math.min(1, x));
   const ny = Math.max(0, Math.min(1, y));
   return { x: nx, y: ny };
+}
+
+function openRoomMetaDialog(room, options = {}) {
+  const kind = room.object_kind;
+  openEntityMetaDialog({
+    kind: "room",
+    id: room.id,
+    shortName: room.name,
+    fullName: room.full_name ?? "",
+    description: room.description ?? "",
+    objectKindId: kind?.id,
+    objectTypeId: kind?.object_type_id ?? room.object_type?.id,
+    objectKindName: kind?.name || "",
+    parentId: options.corridorId ?? room.transition_zone_id,
+    title: "Помещение",
+    isNewCreate: !!options.isNewCreate,
+    startPlacementAfterSave: !!options.startPlacementAfterSave,
+  });
 }
 
 function openTransitionZoneMetaDialog(zone, options = {}) {
@@ -571,8 +992,9 @@ function openImageModal(src, options = {}) {
 }
 
 function closeImageModal() {
-  if (state.placement.transitionZoneId != null) {
+  if (state.placement.transitionZoneId != null || state.placement.objectId != null) {
     state.placement.transitionZoneId = null;
+    state.placement.objectId = null;
     dom.planHint.textContent = "Установка точки отменена.";
     renderObjects();
     renderPlanMarkers();
@@ -625,7 +1047,7 @@ function openEntityMetaDialog(ctx) {
     const num = ctx.number != null ? ctx.number : ctx.id;
     dom.entityMetaNumber.value = num != null ? String(num) : "";
     dom.entityMetaNumber.title = "Только просмотр, изменить нельзя.";
-  } else if (ctx.kind === "transition_zone") {
+  } else if (ctx.kind === "transition_zone" || ctx.kind === "room") {
     dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
     dom.entityMetaNumber.title = "Присваивается автоматически при создании.";
     if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Код (id)";
@@ -640,13 +1062,17 @@ function openEntityMetaDialog(ctx) {
   }
   if (dom.entityMetaParentWrap) {
     const showParent =
-      (isHierarchyMetaKind(ctx.kind) || ctx.kind === "transition_zone") && ctx.parentId != null;
+      (isHierarchyMetaKind(ctx.kind) ||
+        ctx.kind === "transition_zone" ||
+        ctx.kind === "room") &&
+      ctx.parentId != null;
     dom.entityMetaParentWrap.hidden = !showParent;
     if (dom.entityMetaParentId) {
       dom.entityMetaParentId.value = showParent ? String(ctx.parentId) : "";
     }
   }
   const isTz = ctx.kind === "transition_zone";
+  const isRoom = ctx.kind === "room";
   if (dom.entityMetaTypeWrap) {
     dom.entityMetaTypeWrap.hidden = !isTz;
     if (dom.entityMetaReadType) {
@@ -654,9 +1080,9 @@ function openEntityMetaDialog(ctx) {
     }
   }
   if (dom.entityMetaKindReadWrap) {
-    dom.entityMetaKindReadWrap.hidden = !isTz;
+    dom.entityMetaKindReadWrap.hidden = !(isTz || isRoom);
     if (dom.entityMetaReadKind) {
-      dom.entityMetaReadKind.value = isTz ? ctx.objectKindName || "—" : "";
+      dom.entityMetaReadKind.value = isTz || isRoom ? ctx.objectKindName || "—" : "";
     }
   }
   dom.entityMetaShortName.value = ctx.shortName || "";
@@ -668,7 +1094,8 @@ function openEntityMetaDialog(ctx) {
     ctx.kind === "object_kind" ||
     ctx.kind === "object_type_new" ||
     ctx.kind === "object_kind_new" ||
-    ctx.kind === "transition_zone";
+    ctx.kind === "transition_zone" ||
+    ctx.kind === "room";
   dom.entityMetaAddressWrap.hidden = noLoc;
   dom.entityMetaOverlay.hidden = false;
   dom.entityMetaShortName.focus();
@@ -751,10 +1178,21 @@ async function rollbackTransitionZoneCreateCancel(ctx) {
   await loadFloorContext(state.selected.floorId);
 }
 
+async function rollbackRoomCreateCancel(ctx) {
+  if (!ctx?.id) return;
+  await api.deleteObject(ctx.id);
+  if (ctx.parentId) delete state.corridorSelectedRoomId[ctx.parentId];
+  await loadFloorContext(state.selected.floorId);
+}
+
 async function refreshListsAfterMetaCancel(ctx) {
   if (!ctx) return;
   if (ctx.isNewCreate && ctx.kind === "transition_zone") {
     await rollbackTransitionZoneCreateCancel(ctx);
+    return;
+  }
+  if (ctx.isNewCreate && ctx.kind === "room") {
+    await rollbackRoomCreateCancel(ctx);
     return;
   }
   if (ctx.isNewCreate && isHierarchyMetaKind(ctx.kind)) {
@@ -1152,7 +1590,8 @@ function entityMetaHasOptionalGaps(kind, full, desc, addr) {
     kind === "object_kind" ||
     kind === "object_type_new" ||
     kind === "object_kind_new" ||
-    kind === "transition_zone"
+    kind === "transition_zone" ||
+    kind === "room"
   ) {
     return !full || !desc;
   }
@@ -1320,6 +1759,33 @@ async function submitEntityMetaDialog(e) {
     } else if (!dom.planImage.getAttribute("src")) {
       dom.planHint.textContent =
         "Зона добавлена. Загрузите изображение плана этажа, чтобы отметить точку на чертеже.";
+    }
+    return;
+  }
+  if (ctx.kind === "room") {
+    const object_kind_id = ctx.objectKindId;
+    const object_type_id = ctx.objectTypeId;
+    const transition_zone_id = ctx.parentId;
+    if (!object_kind_id || !object_type_id || !transition_zone_id) return;
+    const room = findRoomById(id);
+    await api.updateObject(id, {
+      transition_zone_id,
+      object_type_id,
+      object_kind_id,
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      pos_x: room?.pos_x ?? null,
+      pos_y: room?.pos_y ?? null,
+    });
+    closeEntityMetaDialog();
+    await loadFloorContext(state.selected.floorId);
+    if (ctx.startPlacementAfterSave) {
+      startPlacementForObject(id);
+    } else if (!dom.planImage.getAttribute("src")) {
+      dom.planHint.textContent =
+        "Помещение добавлено. Загрузите изображение плана этажа, чтобы отметить точку на чертеже.";
     }
     return;
   }
@@ -1552,23 +2018,44 @@ dom.planImage.addEventListener("click", () => {
 
 dom.imageModalStage.addEventListener("click", (e) =>
   run(async () => {
-    if (state.placement.transitionZoneId == null) return;
+    if (state.placement.transitionZoneId == null && state.placement.objectId == null) return;
     const coords = getNormalizedImageCoordsFromEvent(e, dom.imageModalImg);
     if (!coords) return;
-    const obj = (state.planDetail?.transition_zones || []).find(
-      (x) => x.id === state.placement.transitionZoneId,
-    );
-    if (!obj) return;
-    await api.updateTransitionZone(obj.id, {
-      object_kind_id: obj.object_kind.id,
-      name: obj.name,
-      pos_x: coords.x,
-      pos_y: coords.y,
-    });
-    state.placement.transitionZoneId = null;
-    closeImageModal();
-    await loadFloorContext(state.selected.floorId);
-    dom.planHint.textContent = "Точка зоны сохранена.";
+
+    if (state.placement.transitionZoneId != null) {
+      const obj = (state.planDetail?.transition_zones || []).find(
+        (x) => x.id === state.placement.transitionZoneId,
+      );
+      if (!obj) return;
+      await api.updateTransitionZone(obj.id, {
+        object_kind_id: obj.object_kind.id,
+        name: obj.name,
+        pos_x: coords.x,
+        pos_y: coords.y,
+      });
+      state.placement.transitionZoneId = null;
+      closeImageModal();
+      await loadFloorContext(state.selected.floorId);
+      dom.planHint.textContent = "Точка зоны сохранена.";
+      return;
+    }
+
+    if (state.placement.objectId != null) {
+      const room = findRoomById(state.placement.objectId);
+      if (!room) return;
+      await api.updateObject(room.id, {
+        transition_zone_id: room.transition_zone_id,
+        object_type_id: room.object_type.id,
+        object_kind_id: room.object_kind.id,
+        name: room.name,
+        pos_x: coords.x,
+        pos_y: coords.y,
+      });
+      state.placement.objectId = null;
+      closeImageModal();
+      await loadFloorContext(state.selected.floorId);
+      dom.planHint.textContent = "Точка помещения сохранена.";
+    }
   }),
 );
 

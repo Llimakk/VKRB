@@ -212,6 +212,40 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
 
     photo_url = effective_photo_url(plan.photo_url, plan.minio_object_key)
 
+    def _object_dict(o: Object) -> dict:
+        return {
+            "id": o.id,
+            "transition_zone_id": o.transition_zone_id,
+            "name": o.name,
+            "number": o.number,
+            "full_name": o.full_name,
+            "description": o.description,
+            "address": o.address,
+            "drawing_url": effective_photo_url(o.drawing_url, o.drawing_minio_object_key),
+            "object_type": {
+                "id": o.object_type.id,
+                "name": o.object_type.name,
+                "number": o.object_type.number,
+                "full_name": o.object_type.full_name,
+                "description": o.object_type.description,
+            },
+            "object_kind": {
+                "id": o.object_kind.id,
+                "name": o.object_kind.name,
+                "object_type_id": o.object_kind.object_type_id,
+                "number": o.object_kind.number,
+                "full_name": o.object_kind.full_name,
+                "description": o.object_kind.description,
+            },
+            "pos_x": o.pos_x,
+            "pos_y": o.pos_y,
+        }
+
+    rooms_by_zone: dict[int, list[dict]] = {}
+    for o in objects:
+        if o.transition_zone_id is not None:
+            rooms_by_zone.setdefault(o.transition_zone_id, []).append(_object_dict(o))
+
     def _zone_dict(z: TransitionZone) -> dict:
         return {
             "id": z.id,
@@ -238,6 +272,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
             },
             "pos_x": z.pos_x,
             "pos_y": z.pos_y,
+            "rooms": rooms_by_zone.get(z.id, []),
         }
 
     return {
@@ -249,35 +284,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
             "photo_url": photo_url,
             "mime_type": plan.mime_type,
         },
-        "objects": [
-            {
-                "id": o.id,
-                "name": o.name,
-                "number": o.number,
-                "full_name": o.full_name,
-                "description": o.description,
-                "address": o.address,
-                "drawing_url": effective_photo_url(o.drawing_url, o.drawing_minio_object_key),
-                "object_type": {
-                    "id": o.object_type.id,
-                    "name": o.object_type.name,
-                    "number": o.object_type.number,
-                    "full_name": o.object_type.full_name,
-                    "description": o.object_type.description,
-                },
-                "object_kind": {
-                    "id": o.object_kind.id,
-                    "name": o.object_kind.name,
-                    "object_type_id": o.object_kind.object_type_id,
-                    "number": o.object_kind.number,
-                    "full_name": o.object_kind.full_name,
-                    "description": o.object_kind.description,
-                },
-                "pos_x": o.pos_x,
-                "pos_y": o.pos_y,
-            }
-            for o in objects
-        ],
+        "objects": [_object_dict(o) for o in objects],
         "transition_zones": [_zone_dict(z) for z in transition_zones],
     }
 

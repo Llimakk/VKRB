@@ -210,7 +210,7 @@ button {
   height: 10px;
   border-radius: 999px;
   border: 1px solid #fff;
-  background: #1976d2;
+  background: #9e9e9e;
   appearance: none;
   transform: translate(-50%, -50%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -218,23 +218,19 @@ button {
 }
 
 .plan-marker--corridor {
-  background: #7b1fa2;
+  background: #6a1b9a;
 }
 
 .plan-marker--stair {
-  background: #ef6c00;
+  background: #e65100;
 }
 
 .plan-marker--lift {
-  background: #00897b;
+  background: #2e7d32;
 }
 
 .plan-marker--room {
-  background: #1976d2;
-}
-
-.plan-marker.is-selected {
-  background: #d32f2f !important;
+  background: #1565c0;
 }
 
 .actions button.is-active {
@@ -287,6 +283,207 @@ td {
 
 .mark-legend {
   margin: 0 0 10px 0;
+}
+
+.corridor-rooms-row td {
+  padding: 0 8px 10px 8px;
+  border-bottom: 1px solid #eee;
+  background: transparent;
+}
+
+.corridor-rooms-panel {
+  margin: 4px 0 2px 20px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #faf8fc 0%, #f4f6f8 100%);
+  border: 1px solid #e4dce8;
+  border-left: 4px solid #7b1fa2;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.corridor-rooms-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.corridor-rooms-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.corridor-rooms-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #6a1b9a;
+}
+
+.corridor-rooms-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a148c;
+  background: #ede7f6;
+  border-radius: 999px;
+}
+
+.corridor-rooms-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.corridor-rooms-picker {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.corridor-rooms-picker-label {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+}
+
+.corridor-rooms-select {
+  flex: 1 1 160px;
+  min-width: 120px;
+  max-width: none;
+  border-radius: 6px;
+  border-color: #d5c8dc;
+}
+
+.corridor-rooms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.corridor-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.corridor-btn:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.corridor-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.corridor-btn.is-active {
+  border-color: #d32f2f;
+  color: #c62828;
+  background: #ffebee;
+}
+
+.corridor-btn--accent {
+  border-color: #7b1fa2;
+  background: #7b1fa2;
+  color: #fff;
+  font-weight: 600;
+}
+
+.corridor-btn--accent:hover:not(:disabled) {
+  background: #6a1b9a;
+}
+
+.corridor-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: #666;
+}
+
+.corridor-btn--ghost:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.corridor-btn--danger {
+  border-color: #ef9a9a;
+  color: #c62828;
+  background: #fff;
+}
+
+.corridor-btn--danger:hover:not(:disabled) {
+  background: #ffebee;
+}
+
+.corridor-room-add-card {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #d5c8dc;
+}
+
+.corridor-room-add-title {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a148c;
+}
+
+.corridor-room-add-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+
+.corridor-room-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.corridor-room-field label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+}
+
+.corridor-room-field select,
+.corridor-room-field input {
+  width: 100%;
+  border-radius: 6px;
+}
+
+.corridor-room-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .mark-col-head {

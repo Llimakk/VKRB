@@ -6,6 +6,7 @@ from app.api.deps import get_db
 from app.models import Object, ObjectKind, Plan
 from app.schemas.admin import ObjectCreate, ObjectKindOut, ObjectOut, ObjectTypeOut, ObjectUpdate
 from app.services.minio_service import effective_photo_url
+from app.services.object_rules import validate_room_attachment
 
 router = APIRouter(prefix="/admin", tags=["admin-objects"])
 
@@ -14,6 +15,7 @@ def _object_out(o: Object) -> ObjectOut:
     return ObjectOut(
         id=o.id,
         plan_id=o.plan_id,
+        transition_zone_id=o.transition_zone_id,
         object_type=ObjectTypeOut.model_validate(o.object_type),
         object_kind=ObjectKindOut.model_validate(o.object_kind),
         name=o.name,
@@ -56,6 +58,13 @@ def create_object(payload: ObjectCreate, db: Session = Depends(get_db)):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
+    validate_room_attachment(
+        db,
+        plan_id=payload.plan_id,
+        transition_zone_id=payload.transition_zone_id,
+        object_type_id=payload.object_type_id,
+    )
+
     object_kind = db.query(ObjectKind).filter(ObjectKind.id == payload.object_kind_id).one_or_none()
     if not object_kind:
         raise HTTPException(status_code=404, detail="Object kind not found")
@@ -64,6 +73,7 @@ def create_object(payload: ObjectCreate, db: Session = Depends(get_db)):
 
     obj = Object(
         plan_id=payload.plan_id,
+        transition_zone_id=payload.transition_zone_id,
         object_type_id=payload.object_type_id,
         object_kind_id=payload.object_kind_id,
         name=payload.name.strip(),
@@ -93,12 +103,20 @@ def update_object(object_id: int, payload: ObjectUpdate, db: Session = Depends(g
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
 
+    validate_room_attachment(
+        db,
+        plan_id=obj.plan_id,
+        transition_zone_id=payload.transition_zone_id,
+        object_type_id=payload.object_type_id,
+    )
+
     object_kind = db.query(ObjectKind).filter(ObjectKind.id == payload.object_kind_id).one_or_none()
     if not object_kind:
         raise HTTPException(status_code=404, detail="Object kind not found")
     if object_kind.object_type_id != payload.object_type_id:
         raise HTTPException(status_code=400, detail="Object kind does not belong to selected object type")
 
+    obj.transition_zone_id = payload.transition_zone_id
     obj.object_type_id = payload.object_type_id
     obj.object_kind_id = payload.object_kind_id
     obj.name = payload.name.strip()

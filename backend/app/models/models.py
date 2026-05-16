@@ -170,6 +170,7 @@ class TransitionZone(Base):
     plan: Mapped["Plan"] = relationship(back_populates="transition_zones")
     object_type: Mapped["ObjectType"] = relationship(back_populates="transition_zones")
     object_kind: Mapped["ObjectKind"] = relationship(back_populates="transition_zones")
+    rooms: Mapped[list["Object"]] = relationship(back_populates="transition_zone", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("plan_id", "object_type_id", "name", name="uq_transition_zone_plan_type_name"),
@@ -183,6 +184,10 @@ class Object(Base):
     plan_id: Mapped[int] = mapped_column(
         ForeignKey("plan.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    transition_zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transition_zone.id", ondelete="CASCADE"),
+        nullable=True,
     )
     object_type_id: Mapped[int] = mapped_column(ForeignKey("object_type.id", ondelete="RESTRICT"), nullable=False)
     object_kind_id: Mapped[int] = mapped_column(ForeignKey("object_kind.id", ondelete="RESTRICT"), nullable=False)
@@ -201,6 +206,7 @@ class Object(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="objects")
+    transition_zone: Mapped["TransitionZone | None"] = relationship(back_populates="rooms")
     object_type: Mapped["ObjectType"] = relationship(back_populates="objects")
     object_kind: Mapped["ObjectKind"] = relationship(back_populates="objects")
 
