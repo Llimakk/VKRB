@@ -72,8 +72,14 @@ function clearPlanView() {
 let editingTransitionZoneId = null;
 let confirmResolver = null;
 let entityMetaSaving = false;
-/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; title?: string }} */
+/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; parentId?: number | null; title?: string }} */
 let pendingMetaContext = null;
+
+const HIERARCHY_META_KINDS = new Set(["campus", "building", "structure", "floor"]);
+
+function isHierarchyMetaKind(kind) {
+  return HIERARCHY_META_KINDS.has(kind);
+}
 
 const CREATE_LABELS = {
   none: { title: "Создать новый кампус", placeholder: "Введите название кампуса" },
@@ -603,8 +609,10 @@ function askConfirmation({ title, message, okText = "Подтвердить", ca
 function openEntityMetaDialog(ctx) {
   pendingMetaContext = ctx;
   dom.entityMetaTitle.textContent = ctx.title || "Дополнительные поля";
+  if (dom.entityMetaParentWrap) dom.entityMetaParentWrap.hidden = true;
   const isDictNew = ctx.kind === "object_type_new" || ctx.kind === "object_kind_new";
   if (ctx.kind === "object_type_new") {
+    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Номер";
     const n = predictedNextObjectTypeId();
     dom.entityMetaNumber.value = String(n);
     dom.entityMetaNumber.title =
@@ -615,25 +623,36 @@ function openEntityMetaDialog(ctx) {
     dom.entityMetaNumber.title =
       "Номер совпадает с id записи; до сохранения показано ожидаемое следующее значение.";
   } else if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
+    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Номер";
     const num = ctx.number != null ? ctx.number : ctx.id;
     dom.entityMetaNumber.value = num != null ? String(num) : "";
     dom.entityMetaNumber.title = "Только просмотр, изменить нельзя.";
+  } else if (isHierarchyMetaKind(ctx.kind)) {
+    dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
+    dom.entityMetaNumber.title = "Присваивается автоматически при создании.";
+    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Код (id)";
   } else {
     dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
     dom.entityMetaNumber.title = "";
+    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Номер";
+  }
+  if (dom.entityMetaParentWrap) {
+    const showParent = isHierarchyMetaKind(ctx.kind) && ctx.parentId != null;
+    dom.entityMetaParentWrap.hidden = !showParent;
+    if (dom.entityMetaParentId) {
+      dom.entityMetaParentId.value = showParent ? String(ctx.parentId) : "";
+    }
   }
   dom.entityMetaShortName.value = ctx.shortName || "";
   dom.entityMetaFullName.value = ctx.fullName ?? "";
   dom.entityMetaDescription.value = ctx.description ?? "";
   dom.entityMetaAddress.value = "";
-  dom.entityMetaDrawingFile.value = "";
   const noLoc =
     ctx.kind === "object_type" ||
     ctx.kind === "object_kind" ||
     ctx.kind === "object_type_new" ||
     ctx.kind === "object_kind_new";
   dom.entityMetaAddressWrap.hidden = noLoc;
-  dom.entityMetaDrawingWrap.hidden = noLoc;
   dom.entityMetaOverlay.hidden = false;
   dom.entityMetaShortName.focus();
 }
@@ -656,6 +675,34 @@ async function refreshListsAfterMetaCancel(ctx) {
   }
   if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
     await loadObjectDictionaries();
+    return;
+  }
+  if (ctx.kind === "campus") {
+    state.campuses = await api.getCampuses();
+    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+    dom.campusSelect.value = String(ctx.id);
+    await onCampusChange();
+    return;
+  }
+  if (ctx.kind === "building") {
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    dom.buildingSelect.value = String(ctx.id);
+    await onBuildingChange();
+    return;
+  }
+  if (ctx.kind === "structure") {
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    dom.structureSelect.value = String(ctx.id);
+    await onStructureChange();
+    return;
+  }
+  if (ctx.kind === "floor") {
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    dom.floorSelect.value = String(ctx.id);
+    await onFloorChange();
     return;
   }
   if (ctx.kind === "transition_zone" && state.selected.floorId) {
@@ -1127,6 +1174,66 @@ async function submitEntityMetaDialog(e) {
     await loadObjectDictionaries();
     return;
   }
+  if (ctx.kind === "campus") {
+    await api.updateCampus(id, {
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      address: addr || null,
+    });
+    closeEntityMetaDialog();
+    state.campuses = await api.getCampuses();
+    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+    dom.campusSelect.value = String(id);
+    await onCampusChange();
+    return;
+  }
+  if (ctx.kind === "building") {
+    await api.updateBuilding(id, {
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      address: addr || null,
+    });
+    closeEntityMetaDialog();
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    dom.buildingSelect.value = String(id);
+    await onBuildingChange();
+    return;
+  }
+  if (ctx.kind === "structure") {
+    await api.updateStructure(id, {
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      address: addr || null,
+    });
+    closeEntityMetaDialog();
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    dom.structureSelect.value = String(id);
+    await onStructureChange();
+    return;
+  }
+  if (ctx.kind === "floor") {
+    await api.updateFloor(id, {
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      address: addr || null,
+    });
+    closeEntityMetaDialog();
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    dom.floorSelect.value = String(id);
+    await onFloorChange();
+    return;
+  }
   } finally {
     entityMetaSaving = false;
   }
@@ -1165,6 +1272,12 @@ dom.createCampusForm.addEventListener("submit", (e) =>
     fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
     dom.campusSelect.value = String(created.id);
     await onCampusChange();
+    openEntityMetaDialog({
+      kind: "campus",
+      id: created.id,
+      shortName: created.name,
+      title: "Кампус",
+    });
   }),
 );
 
@@ -1172,10 +1285,11 @@ dom.createBuildingForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     if (!state.selected.campusId) return;
+    const campusId = state.selected.campusId;
     const name = dom.createBuildingName.value.trim();
     if (!name) return;
     const created = await api.createBuilding({
-      campus_id: state.selected.campusId,
+      campus_id: campusId,
       name,
     });
     dom.createBuildingName.value = "";
@@ -1183,6 +1297,13 @@ dom.createBuildingForm.addEventListener("submit", (e) =>
     fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
     dom.buildingSelect.value = String(created.id);
     await onBuildingChange();
+    openEntityMetaDialog({
+      kind: "building",
+      id: created.id,
+      shortName: created.name,
+      parentId: campusId,
+      title: "Корпус",
+    });
   }),
 );
 
@@ -1190,10 +1311,11 @@ dom.createStructureForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     if (!state.selected.buildingId) return;
+    const buildingId = state.selected.buildingId;
     const name = dom.createStructureName.value.trim();
     if (!name) return;
     const created = await api.createStructure({
-      building_id: state.selected.buildingId,
+      building_id: buildingId,
       name,
     });
     dom.createStructureName.value = "";
@@ -1201,6 +1323,13 @@ dom.createStructureForm.addEventListener("submit", (e) =>
     fillSelect(dom.structureSelect, state.structures, "Введите строение");
     dom.structureSelect.value = String(created.id);
     await onStructureChange();
+    openEntityMetaDialog({
+      kind: "structure",
+      id: created.id,
+      shortName: created.name,
+      parentId: buildingId,
+      title: "Строение",
+    });
   }),
 );
 
@@ -1208,10 +1337,11 @@ dom.createFloorForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     if (!state.selected.structureId) return;
+    const structureId = state.selected.structureId;
     const name = dom.createFloorName.value.trim();
     if (!name) return;
     const created = await api.createFloor({
-      structure_id: state.selected.structureId,
+      structure_id: structureId,
       name,
       sort_order: nextFloorSortOrder(),
     });
@@ -1220,6 +1350,13 @@ dom.createFloorForm.addEventListener("submit", (e) =>
     fillSelect(dom.floorSelect, state.floors, "Введите этаж");
     dom.floorSelect.value = String(created.id);
     await onFloorChange();
+    openEntityMetaDialog({
+      kind: "floor",
+      id: created.id,
+      shortName: created.name,
+      parentId: structureId,
+      title: "Этаж",
+    });
   }),
 );
 

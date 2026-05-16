@@ -278,8 +278,12 @@
         <h3 id="entityMetaTitle">Дополнительные поля</h3>
         <form id="entityMetaForm" class="modal-form entity-meta-form" novalidate>
           <div>
-            <label for="entityMetaNumber">Номер</label>
+            <label for="entityMetaNumber" id="entityMetaNumberLabel">Номер</label>
             <input id="entityMetaNumber" type="text" readonly />
+          </div>
+          <div id="entityMetaParentWrap" hidden>
+            <label for="entityMetaParentId">Код (id) родителя</label>
+            <input id="entityMetaParentId" type="text" readonly />
           </div>
           <div>
             <label for="entityMetaShortName">Краткое имя</label>
@@ -296,10 +300,6 @@
           <div id="entityMetaAddressWrap">
             <label for="entityMetaAddress">Адрес</label>
             <input id="entityMetaAddress" type="text" autocomplete="off" />
-          </div>
-          <div id="entityMetaDrawingWrap">
-            <label for="entityMetaDrawingFile">Чертёж (изображение или PDF)</label>
-            <input id="entityMetaDrawingFile" type="file" accept="image/*,application/pdf" />
           </div>
           <div class="modal-actions">
             <button type="button" id="entityMetaCancelBtn" class="btn-secondary">Отмена</button>
