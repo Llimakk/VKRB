@@ -99,8 +99,14 @@ body {
   margin: 0 0 10px 0;
 }
 
+.content-header .create-entity-card {
+  flex: 0 1 380px;
+  width: min(380px, 42vw);
+  max-width: 420px;
+  align-self: flex-start;
+}
+
 .create-entity-card {
-  max-width: min(50%, 420px);
   width: 100%;
 }
 
@@ -130,6 +136,43 @@ body {
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.plan-floor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin: 8px 0 4px;
+}
+
+.plan-floor-tools[hidden] {
+  display: none !important;
+}
+
+.content-grid:not(.content-grid--floor) .plan-floor-tools {
+  display: none !important;
+}
+
+.plan-marker-scale-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 220px;
+  min-width: 160px;
+}
+
+.plan-marker-scale-label {
+  font-size: 13px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.plan-marker-scale-wrap input[type="range"] {
+  flex: 1 1 80px;
+  min-width: 72px;
+  padding: 0;
+  margin: 0;
 }
 
 .objects-card {
@@ -201,13 +244,18 @@ button {
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  --plan-marker-scale: 1;
+}
+
+.plan-markers {
+  --plan-marker-scale: 1;
 }
 
 .plan-marker {
   position: absolute;
   padding: 0;
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--plan-marker-scale, 1));
+  height: calc(10px * var(--plan-marker-scale, 1));
   border-radius: 999px;
   border: 1px solid #fff;
   background: #9e9e9e;
@@ -218,7 +266,7 @@ button {
 }
 
 .plan-marker--corridor {
-  background: #6a1b9a;
+  background: #5b21b6;
 }
 
 .plan-marker--stair {
@@ -230,7 +278,7 @@ button {
 }
 
 .plan-marker--room {
-  background: #1565c0;
+  background: #64b5f6;
 }
 
 .actions button.is-active {
@@ -243,7 +291,7 @@ button {
 }
 
 .plan-marker-legend {
-  margin: 8px 0 6px 0;
+  margin: 0;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -555,9 +603,6 @@ td {
   grid-column: 1 / -1;
 }
 
-.content-grid--split #createEntityCard {
-  max-width: 100%;
-}
 
 .content-grid--split #entityEditCard {
   grid-column: 2;
@@ -577,8 +622,48 @@ td {
   justify-self: end;
 }
 
+.content-grid--dict {
+  grid-template-columns: 1fr;
+}
+
+.content-grid--dict #photoCard,
+.content-grid--dict #rightCard {
+  display: none !important;
+}
+
 .content-grid--dict #entityEditCard {
   display: none !important;
+}
+
+.dict-cards-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.dict-cards-row[hidden] {
+  display: none !important;
+}
+
+.dict-cards-row .dict-page-card[hidden] {
+  display: none !important;
+}
+
+.dict-cards-row .dict-page-card:not([hidden]) {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .dict-cards-row {
+    grid-template-columns: 1fr;
+  }
+
+  .content-header .create-entity-card {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+  }
 }
 
 .entity-edit-card-header {

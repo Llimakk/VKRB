@@ -1,6 +1,12 @@
 import { api } from "./api.js";
 import { dom, fillSelect } from "./dom.js";
 
+const TRANSITION_ZONE_TYPE_LABEL = "Зона перехода";
+const PLAN_MARKER_SCALE_STORAGE_KEY = "vkrb_plan_marker_scale";
+const PLAN_MARKER_SCALE_MIN = 0.6;
+const PLAN_MARKER_SCALE_MAX = 1.8;
+const PLAN_MARKER_SCALE_DEFAULT = 1;
+
 const state = {
   campuses: [],
   buildings: [],
@@ -28,6 +34,7 @@ const state = {
   corridorAddRoomOpenId: null,
   /** @type {"none"|"campus"|"building"|"structure"|"floor"} */
   uiMode: "none",
+  planMarkerScale: PLAN_MARKER_SCALE_DEFAULT,
 };
 
 function getSelectedName(items, id) {
@@ -83,8 +90,6 @@ let confirmResolver = null;
 let entityMetaSaving = false;
 /** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; objectKindId?: number; objectTypeName?: string; objectKindName?: string; parentId?: number | null; title?: string; isNewCreate?: boolean; startPlacementAfterSave?: boolean }} */
 let pendingMetaContext = null;
-
-const TRANSITION_ZONE_TYPE_LABEL = "Зона перехода";
 
 const HIERARCHY_META_KINDS = new Set(["campus", "building", "structure", "floor"]);
 
@@ -249,12 +254,13 @@ function setMode(mode) {
   state.uiMode = mode;
   if (mode === "none") {
     dom.photoCard.style.display = "none";
-    dom.planMarkerLegend.hidden = true;
+    if (dom.planFloorTools) dom.planFloorTools.hidden = true;
     dom.createEntityCard.style.display = "block";
-    dom.rightCard.style.display = "block";
-    dom.rightCardTitle.textContent = "Типы и виды объектов";
+    dom.rightCard.style.display = "none";
     dom.zoneManagement.hidden = true;
-    dom.dictionariesManagement.hidden = false;
+    if (dom.dictCardsRow) dom.dictCardsRow.hidden = false;
+    if (dom.objectTypesCard) dom.objectTypesCard.hidden = false;
+    if (dom.objectKindsCard) dom.objectKindsCard.hidden = false;
     dom.emptyStateText.style.display = "block";
     dom.emptyStateText.textContent =
       "Создайте кампус или выберите существующий в дереве.";
@@ -266,23 +272,28 @@ function setMode(mode) {
   dom.createEntityCard.style.display = mode === "floor" ? "none" : "block";
   if (mode === "floor") {
     dom.photoCardTitle.textContent = "План";
-    dom.planMarkerLegend.hidden = false;
+    if (dom.planFloorTools) dom.planFloorTools.hidden = false;
     dom.rightCardTitle.textContent = "Зоны перехода";
     dom.rightCard.style.display = "block";
     dom.objectForm.style.display = "grid";
     dom.zoneManagement.hidden = false;
-    dom.dictionariesManagement.hidden = true;
+    if (dom.dictCardsRow) dom.dictCardsRow.hidden = true;
+    if (dom.objectTypesCard) dom.objectTypesCard.hidden = true;
+    if (dom.objectKindsCard) dom.objectKindsCard.hidden = true;
     dom.emptyStateText.style.display = "none";
     applyCreateFormsVisibility("floor");
     syncEntityEditCard();
     return;
   }
-  dom.planMarkerLegend.hidden = true;
+  if (dom.planFloorTools) dom.planFloorTools.hidden = true;
   dom.photoCardTitle.textContent = "Фото";
   dom.rightCardTitle.textContent = "";
   dom.rightCard.style.display = "none";
   dom.objectForm.style.display = "none";
   dom.objectsTbody.innerHTML = "";
+  if (dom.dictCardsRow) dom.dictCardsRow.hidden = true;
+  if (dom.objectTypesCard) dom.objectTypesCard.hidden = true;
+  if (dom.objectKindsCard) dom.objectKindsCard.hidden = true;
   dom.emptyStateText.style.display = "none";
   applyCreateFormsVisibility(mode);
   syncEntityEditCard();
@@ -483,7 +494,7 @@ function renderObjects() {
           state.placement.transitionZoneId = null;
         }
         await loadFloorContext(state.selected.floorId);
-        dom.planHint.textContent = "Отметка зоны удалена.";
+        syncPlanHintStatus();
       });
 
     wrap.append(editBtn, deleteBtn);
@@ -628,7 +639,7 @@ function buildCorridorRoomsRow(corridor) {
       });
       if (state.placement.objectId === room.id) state.placement.objectId = null;
       await loadFloorContext(state.selected.floorId);
-      dom.planHint.textContent = "Отметка помещения удалена.";
+      syncPlanHintStatus();
     });
 
   const deleteRoomBtn = document.createElement("button");
@@ -995,7 +1006,7 @@ function closeImageModal() {
   if (state.placement.transitionZoneId != null || state.placement.objectId != null) {
     state.placement.transitionZoneId = null;
     state.placement.objectId = null;
-    dom.planHint.textContent = "Установка точки отменена.";
+    syncPlanHintStatus();
     renderObjects();
     renderPlanMarkers();
   }
@@ -1216,6 +1227,52 @@ async function refreshListsAfterMetaCancel(ctx) {
 function syncDownloadButton(enabled) {
   if (!dom.downloadImageBtn) return;
   dom.downloadImageBtn.disabled = !enabled;
+}
+
+/** Без всплывающих «сохранено» — только пусто или «нет изображения». */
+function syncPlanHintStatus() {
+  if (!dom.planHint) return;
+  if (state.placement.transitionZoneId != null || state.placement.objectId != null) return;
+  if (dom.planImage.getAttribute("src")) {
+    dom.planHint.textContent = "";
+  } else {
+    dom.planHint.textContent = "Изображение не загружено.";
+  }
+}
+
+function applyPlanMarkerScale(scale) {
+  const n = Number(scale);
+  const clamped = Math.min(
+    PLAN_MARKER_SCALE_MAX,
+    Math.max(PLAN_MARKER_SCALE_MIN, Number.isFinite(n) ? n : PLAN_MARKER_SCALE_DEFAULT),
+  );
+  state.planMarkerScale = clamped;
+  if (dom.planMarkerScale) dom.planMarkerScale.value = String(clamped);
+  for (const el of [dom.planMarkers, dom.imageModalMarkers]) {
+    if (el) el.style.setProperty("--plan-marker-scale", String(clamped));
+  }
+  try {
+    localStorage.setItem(PLAN_MARKER_SCALE_STORAGE_KEY, String(clamped));
+  } catch {
+    /* ignore */
+  }
+  if (state.planDetail) renderPlanMarkers();
+}
+
+function initPlanMarkerScale() {
+  let initial = PLAN_MARKER_SCALE_DEFAULT;
+  try {
+    const stored = localStorage.getItem(PLAN_MARKER_SCALE_STORAGE_KEY);
+    if (stored != null) initial = Number(stored);
+  } catch {
+    /* ignore */
+  }
+  applyPlanMarkerScale(initial);
+  if (dom.planMarkerScale) {
+    dom.planMarkerScale.addEventListener("input", () => {
+      applyPlanMarkerScale(dom.planMarkerScale.value);
+    });
+  }
 }
 
 async function downloadCurrentPhoto() {
@@ -2036,7 +2093,7 @@ dom.imageModalStage.addEventListener("click", (e) =>
       state.placement.transitionZoneId = null;
       closeImageModal();
       await loadFloorContext(state.selected.floorId);
-      dom.planHint.textContent = "Точка зоны сохранена.";
+      syncPlanHintStatus();
       return;
     }
 
@@ -2054,7 +2111,7 @@ dom.imageModalStage.addEventListener("click", (e) =>
       state.placement.objectId = null;
       closeImageModal();
       await loadFloorContext(state.selected.floorId);
-      dom.planHint.textContent = "Точка помещения сохранена.";
+      syncPlanHintStatus();
     }
   }),
 );
@@ -2232,8 +2289,8 @@ dom.deleteImageBtn.addEventListener("click", () =>
 async function run(fn) {
   try {
     await fn();
-  } catch {
-    /* сбои сети и API не выводим в интерфейс */
+  } catch (e) {
+    console.error("[VKRB]", e);
   }
 }
 
@@ -2250,6 +2307,7 @@ function initPlanMarkerLayoutListeners() {
 
 run(async () => {
   await Promise.all([loadInitialLists(), loadObjectDictionaries()]);
+  initPlanMarkerScale();
   initPlanMarkerLayoutListeners();
   applyEntityEditCollapsedUi();
 });
