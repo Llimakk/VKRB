@@ -69,11 +69,12 @@ function clearPlanView() {
   state.selected.planId = null;
 }
 
-let editingTransitionZoneId = null;
 let confirmResolver = null;
 let entityMetaSaving = false;
-/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; parentId?: number | null; title?: string; isNewCreate?: boolean }} */
+/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; objectKindId?: number; objectTypeName?: string; objectKindName?: string; parentId?: number | null; title?: string; isNewCreate?: boolean; startPlacementAfterSave?: boolean }} */
 let pendingMetaContext = null;
+
+const TRANSITION_ZONE_TYPE_LABEL = "Зона перехода";
 
 const HIERARCHY_META_KINDS = new Set(["campus", "building", "structure", "floor"]);
 
@@ -365,7 +366,7 @@ function renderObjects() {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.textContent = "Редактировать";
-    editBtn.onclick = () => openEditObjectModal(obj);
+    editBtn.onclick = () => openTransitionZoneMetaDialog(obj);
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -540,24 +541,22 @@ function getNormalizedImageCoordsFromEvent(event, targetImage) {
   return { x: nx, y: ny };
 }
 
-function openEditObjectModal(obj) {
-  editingTransitionZoneId = obj.id;
-  dom.editObjectName.value = obj.name;
-  dom.editObjectKind.innerHTML = "";
-  for (const t of transitionZoneKinds()) {
-    const opt = document.createElement("option");
-    opt.value = t.id;
-    opt.textContent = t.name;
-    if (t.id === obj.object_kind.id) opt.selected = true;
-    dom.editObjectKind.appendChild(opt);
-  }
-  dom.modalOverlay.hidden = false;
-  dom.editObjectName.focus();
-}
-
-function closeEditObjectModal() {
-  dom.modalOverlay.hidden = true;
-  editingTransitionZoneId = null;
+function openTransitionZoneMetaDialog(zone, options = {}) {
+  const kind = zone.object_kind;
+  openEntityMetaDialog({
+    kind: "transition_zone",
+    id: zone.id,
+    shortName: zone.name,
+    fullName: zone.full_name ?? "",
+    description: zone.description ?? "",
+    objectKindId: kind?.id,
+    objectTypeName: zone.object_type?.name || TRANSITION_ZONE_TYPE_LABEL,
+    objectKindName: kind?.name || "",
+    parentId: state.selected.floorId,
+    title: "Зона перехода",
+    isNewCreate: !!options.isNewCreate,
+    startPlacementAfterSave: !!options.startPlacementAfterSave,
+  });
 }
 
 function openImageModal(src, options = {}) {
@@ -626,6 +625,10 @@ function openEntityMetaDialog(ctx) {
     const num = ctx.number != null ? ctx.number : ctx.id;
     dom.entityMetaNumber.value = num != null ? String(num) : "";
     dom.entityMetaNumber.title = "Только просмотр, изменить нельзя.";
+  } else if (ctx.kind === "transition_zone") {
+    dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
+    dom.entityMetaNumber.title = "Присваивается автоматически при создании.";
+    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Код (id)";
   } else if (isHierarchyMetaKind(ctx.kind)) {
     dom.entityMetaNumber.value = ctx.id != null ? String(ctx.id) : "";
     dom.entityMetaNumber.title = "Присваивается автоматически при создании.";
@@ -636,10 +639,24 @@ function openEntityMetaDialog(ctx) {
     if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Номер";
   }
   if (dom.entityMetaParentWrap) {
-    const showParent = isHierarchyMetaKind(ctx.kind) && ctx.parentId != null;
+    const showParent =
+      (isHierarchyMetaKind(ctx.kind) || ctx.kind === "transition_zone") && ctx.parentId != null;
     dom.entityMetaParentWrap.hidden = !showParent;
     if (dom.entityMetaParentId) {
       dom.entityMetaParentId.value = showParent ? String(ctx.parentId) : "";
+    }
+  }
+  const isTz = ctx.kind === "transition_zone";
+  if (dom.entityMetaTypeWrap) {
+    dom.entityMetaTypeWrap.hidden = !isTz;
+    if (dom.entityMetaReadType) {
+      dom.entityMetaReadType.value = isTz ? ctx.objectTypeName || TRANSITION_ZONE_TYPE_LABEL : "";
+    }
+  }
+  if (dom.entityMetaKindReadWrap) {
+    dom.entityMetaKindReadWrap.hidden = !isTz;
+    if (dom.entityMetaReadKind) {
+      dom.entityMetaReadKind.value = isTz ? ctx.objectKindName || "—" : "";
     }
   }
   dom.entityMetaShortName.value = ctx.shortName || "";
@@ -650,7 +667,8 @@ function openEntityMetaDialog(ctx) {
     ctx.kind === "object_type" ||
     ctx.kind === "object_kind" ||
     ctx.kind === "object_type_new" ||
-    ctx.kind === "object_kind_new";
+    ctx.kind === "object_kind_new" ||
+    ctx.kind === "transition_zone";
   dom.entityMetaAddressWrap.hidden = noLoc;
   dom.entityMetaOverlay.hidden = false;
   dom.entityMetaShortName.focus();
@@ -723,8 +741,22 @@ async function rollbackHierarchyCreateCancel(ctx) {
   }
 }
 
+async function rollbackTransitionZoneCreateCancel(ctx) {
+  if (!ctx?.id) return;
+  await api.deleteTransitionZone(ctx.id);
+  dom.nameInput.value = ctx.shortName || "";
+  if (ctx.objectKindId && dom.kindSelect) {
+    dom.kindSelect.value = String(ctx.objectKindId);
+  }
+  await loadFloorContext(state.selected.floorId);
+}
+
 async function refreshListsAfterMetaCancel(ctx) {
   if (!ctx) return;
+  if (ctx.isNewCreate && ctx.kind === "transition_zone") {
+    await rollbackTransitionZoneCreateCancel(ctx);
+    return;
+  }
   if (ctx.isNewCreate && isHierarchyMetaKind(ctx.kind)) {
     await rollbackHierarchyCreateCancel(ctx);
     return;
@@ -740,9 +772,6 @@ async function refreshListsAfterMetaCancel(ctx) {
   if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
     await loadObjectDictionaries();
     return;
-  }
-  if (ctx.kind === "transition_zone" && state.selected.floorId) {
-    await loadFloorContext(state.selected.floorId);
   }
 }
 
@@ -1122,7 +1151,8 @@ function entityMetaHasOptionalGaps(kind, full, desc, addr) {
     kind === "object_type" ||
     kind === "object_kind" ||
     kind === "object_type_new" ||
-    kind === "object_kind_new"
+    kind === "object_kind_new" ||
+    kind === "transition_zone"
   ) {
     return !full || !desc;
   }
@@ -1268,6 +1298,29 @@ async function submitEntityMetaDialog(e) {
     fillSelect(dom.floorSelect, state.floors, "Введите этаж");
     dom.floorSelect.value = String(id);
     await onFloorChange();
+    return;
+  }
+  if (ctx.kind === "transition_zone") {
+    const object_kind_id = ctx.objectKindId;
+    if (!object_kind_id) return;
+    const zone = (state.planDetail?.transition_zones || []).find((z) => z.id === id);
+    await api.updateTransitionZone(id, {
+      object_kind_id,
+      name: short,
+      number: numVal,
+      full_name: full || null,
+      description: desc || null,
+      pos_x: zone?.pos_x ?? null,
+      pos_y: zone?.pos_y ?? null,
+    });
+    closeEntityMetaDialog();
+    await loadFloorContext(state.selected.floorId);
+    if (ctx.startPlacementAfterSave) {
+      startPlacementForTransitionZone(id);
+    } else if (!dom.planImage.getAttribute("src")) {
+      dom.planHint.textContent =
+        "Зона добавлена. Загрузите изображение плана этажа, чтобы отметить точку на чертеже.";
+    }
     return;
   }
   } finally {
@@ -1485,21 +1538,6 @@ dom.entityEditForm.addEventListener("submit", (e) =>
   }),
 );
 
-dom.editObjectForm.addEventListener("submit", (e) =>
-  run(async () => {
-    e.preventDefault();
-    if (editingTransitionZoneId == null) return;
-    const object_kind_id = Number(dom.editObjectKind.value);
-    const name = dom.editObjectName.value.trim();
-    if (!object_kind_id || !name) return;
-    await api.updateTransitionZone(editingTransitionZoneId, { object_kind_id, name });
-    closeEditObjectModal();
-    await loadFloorContext(state.selected.floorId);
-  }),
-);
-
-dom.cancelEditObjectBtn.addEventListener("click", () => closeEditObjectModal());
-
 dom.closeImageModalBtn.addEventListener("click", () => closeImageModal());
 
 dom.imageModalOverlay.addEventListener("click", (e) => {
@@ -1542,10 +1580,6 @@ dom.confirmOverlay.addEventListener("click", (e) => {
   if (e.target === dom.confirmOverlay) closeConfirmModal(false);
 });
 
-dom.modalOverlay.addEventListener("click", (e) => {
-  if (e.target === dom.modalOverlay) closeEditObjectModal();
-});
-
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!dom.confirmOverlay.hidden) closeConfirmModal(false);
@@ -1556,7 +1590,6 @@ document.addEventListener("keydown", (e) => {
       await refreshListsAfterMetaCancel(ctx);
     });
   } else if (!dom.imageModalOverlay.hidden) closeImageModal();
-  else if (!dom.modalOverlay.hidden) closeEditObjectModal();
 });
 
 dom.campusSelect.addEventListener("change", () => run(onCampusChange));
@@ -1632,14 +1665,13 @@ dom.objectForm.addEventListener("submit", (e) =>
       object_kind_id,
       name,
     });
+    const startPlacement = !!dom.planImage.getAttribute("src");
     dom.nameInput.value = "";
     await loadFloorContext(state.selected.floorId);
-    if (dom.planImage.getAttribute("src")) {
-      startPlacementForTransitionZone(created.id);
-    } else {
-      dom.planHint.textContent =
-        "Зона добавлена. Загрузите изображение плана этажа, чтобы отметить точку на чертеже.";
-    }
+    openTransitionZoneMetaDialog(created, {
+      isNewCreate: true,
+      startPlacementAfterSave: startPlacement,
+    });
   }),
 );
 

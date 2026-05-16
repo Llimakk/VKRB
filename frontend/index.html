@@ -225,26 +225,6 @@
       </section>
     </main>
 
-    <div id="modalOverlay" class="modal-overlay" hidden>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="editObjectModalTitle">
-        <h3 id="editObjectModalTitle">Редактировать зону перехода</h3>
-        <form id="editObjectForm" class="modal-form">
-          <div>
-            <label for="editObjectKind">Вид</label>
-            <select id="editObjectKind" required></select>
-          </div>
-          <div>
-            <label for="editObjectName">Название</label>
-            <input id="editObjectName" type="text" autocomplete="off" required />
-          </div>
-          <div class="modal-actions">
-            <button type="button" id="cancelEditObjectBtn" class="btn-secondary">Отмена</button>
-            <button type="submit">Сохранить</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <div id="imageModalOverlay" class="modal-overlay" hidden>
       <div class="modal-dialog image-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
         <h3 id="imageModalTitle" hidden>Просмотр изображения</h3>
@@ -281,6 +261,14 @@
           <div id="entityMetaParentWrap" hidden>
             <label for="entityMetaParentId">Код (id) родителя</label>
             <input id="entityMetaParentId" type="text" readonly />
+          </div>
+          <div id="entityMetaTypeWrap" hidden>
+            <label for="entityMetaReadType">Тип</label>
+            <input id="entityMetaReadType" type="text" readonly />
+          </div>
+          <div id="entityMetaKindReadWrap" hidden>
+            <label for="entityMetaReadKind">Вид</label>
+            <input id="entityMetaReadKind" type="text" readonly />
           </div>
           <div>
             <label for="entityMetaShortName">Краткое имя</label>
