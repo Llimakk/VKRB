@@ -22,7 +22,6 @@ export const dom = {
   entityEditPhotoEmpty: document.getElementById("entityEditPhotoEmpty"),
   entityEditPhotoLink: document.getElementById("entityEditPhotoLink"),
   entityEditForm: document.getElementById("entityEditForm"),
-  entityEditNumber: document.getElementById("entityEditNumber"),
   entityEditShortName: document.getElementById("entityEditShortName"),
   entityEditFullName: document.getElementById("entityEditFullName"),
   entityEditDescription: document.getElementById("entityEditDescription"),

@@ -72,7 +72,7 @@ function clearPlanView() {
 let editingTransitionZoneId = null;
 let confirmResolver = null;
 let entityMetaSaving = false;
-/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; parentId?: number | null; title?: string }} */
+/** @type {null | { kind: string; id?: number; number?: number | null; shortName?: string; fullName?: string; description?: string; objectTypeId?: number; parentId?: number | null; title?: string; isNewCreate?: boolean }} */
 let pendingMetaContext = null;
 
 const HIERARCHY_META_KINDS = new Set(["campus", "building", "structure", "floor"]);
@@ -204,7 +204,6 @@ function syncEntityEditCard() {
     dom.entityEditPhotoEmpty.hidden = false;
     dom.entityEditPhotoEmpty.textContent = "—";
   }
-  dom.entityEditNumber.value = row.number != null ? String(row.number) : "";
   dom.entityEditShortName.value = row.name || "";
   dom.entityEditFullName.value = row.full_name || "";
   dom.entityEditDescription.value = row.description || "";
@@ -663,8 +662,73 @@ function closeEntityMetaDialog() {
   dom.entityMetaForm.reset();
 }
 
+async function rollbackHierarchyCreateCancel(ctx) {
+  if (!ctx?.id) return;
+
+  if (ctx.kind === "floor") {
+    await api.deleteFloor(ctx.id);
+    state.selected.floorId = null;
+    clearPlanView();
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    dom.createFloorName.value = ctx.shortName || "";
+    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+    setMode("structure");
+    if (state.selected.structureId) loadEntityImage("structure", state.selected.structureId);
+    renderPath();
+    syncEntityEditCard();
+    syncDeleteBranchButton();
+    return;
+  }
+  if (ctx.kind === "structure") {
+    await api.deleteStructure(ctx.id);
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    dom.createStructureName.value = ctx.shortName || "";
+    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
+    setMode("building");
+    loadEntityImage("building", state.selected.buildingId);
+    renderPath();
+    syncEntityEditCard();
+    syncDeleteBranchButton();
+    return;
+  }
+  if (ctx.kind === "building") {
+    await api.deleteBuilding(ctx.id);
+    state.selected.buildingId = null;
+    state.selected.structureId = null;
+    state.selected.floorId = null;
+    clearPlanView();
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    fillSelect(dom.structureSelect, [], "Введите строение", true);
+    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    dom.createBuildingName.value = ctx.shortName || "";
+    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
+    setMode("campus");
+    loadEntityImage("campus", state.selected.campusId);
+    renderPath();
+    syncEntityEditCard();
+    syncDeleteBranchButton();
+    return;
+  }
+  if (ctx.kind === "campus") {
+    await api.deleteCampus(ctx.id);
+    dom.createCampusName.value = ctx.shortName || "";
+    await loadInitialLists();
+  }
+}
+
 async function refreshListsAfterMetaCancel(ctx) {
   if (!ctx) return;
+  if (ctx.isNewCreate && isHierarchyMetaKind(ctx.kind)) {
+    await rollbackHierarchyCreateCancel(ctx);
+    return;
+  }
   if (ctx.kind === "object_type_new") {
     dom.objectTypeNameInput.value = ctx.shortName || "";
     return;
@@ -675,34 +739,6 @@ async function refreshListsAfterMetaCancel(ctx) {
   }
   if (ctx.kind === "object_type" || ctx.kind === "object_kind") {
     await loadObjectDictionaries();
-    return;
-  }
-  if (ctx.kind === "campus") {
-    state.campuses = await api.getCampuses();
-    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
-    dom.campusSelect.value = String(ctx.id);
-    await onCampusChange();
-    return;
-  }
-  if (ctx.kind === "building") {
-    state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-    dom.buildingSelect.value = String(ctx.id);
-    await onBuildingChange();
-    return;
-  }
-  if (ctx.kind === "structure") {
-    state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
-    dom.structureSelect.value = String(ctx.id);
-    await onStructureChange();
-    return;
-  }
-  if (ctx.kind === "floor") {
-    state.floors = await api.getFloors(state.selected.structureId);
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
-    dom.floorSelect.value = String(ctx.id);
-    await onFloorChange();
     return;
   }
   if (ctx.kind === "transition_zone" && state.selected.floorId) {
@@ -1277,6 +1313,7 @@ dom.createCampusForm.addEventListener("submit", (e) =>
       id: created.id,
       shortName: created.name,
       title: "Кампус",
+      isNewCreate: true,
     });
   }),
 );
@@ -1303,6 +1340,7 @@ dom.createBuildingForm.addEventListener("submit", (e) =>
       shortName: created.name,
       parentId: campusId,
       title: "Корпус",
+      isNewCreate: true,
     });
   }),
 );
@@ -1329,6 +1367,7 @@ dom.createStructureForm.addEventListener("submit", (e) =>
       shortName: created.name,
       parentId: buildingId,
       title: "Строение",
+      isNewCreate: true,
     });
   }),
 );
@@ -1356,6 +1395,7 @@ dom.createFloorForm.addEventListener("submit", (e) =>
       shortName: created.name,
       parentId: structureId,
       title: "Этаж",
+      isNewCreate: true,
     });
   }),
 );
@@ -1400,20 +1440,12 @@ dom.entityEditForm.addEventListener("submit", (e) =>
     const level = getRenameLevel();
     const short = dom.entityEditShortName.value.trim();
     if (!short) return;
-    const numTrim = (dom.entityEditNumber.value ?? "").trim();
-    let numberVal = null;
-    if (numTrim !== "") {
-      const n = Number(numTrim);
-      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) return;
-      numberVal = n;
-    }
     const full = dom.entityEditFullName.value.trim() || null;
     const desc = dom.entityEditDescription.value.trim() || null;
     const addr = dom.entityEditAddress.value.trim() || null;
 
     const payload = {
       name: short,
-      number: numberVal,
       full_name: full,
       description: desc,
       address: addr,
