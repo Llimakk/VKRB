@@ -2,6 +2,12 @@ import { api } from "./api.js";
 import { dom, fillSelect } from "./dom.js";
 
 const TRANSITION_ZONE_TYPE_LABEL = "Зона перехода";
+const ADMIN_HOME_PAGE_TITLE =
+  "Панель администратора для заполнения информации об объектах университета";
+const SELECT_CAMPUS_PLACEHOLDER = "Выберите кампус";
+const SELECT_BUILDING_PLACEHOLDER = "Выберите корпус";
+const SELECT_STRUCTURE_PLACEHOLDER = "Выберите строение";
+const SELECT_FLOOR_PLACEHOLDER = "Выберите этаж";
 const PLAN_MARKER_SCALE_STORAGE_KEY = "vkrb_plan_marker_scale";
 const PLAN_MARKER_SCALE_MIN = 0.6;
 const PLAN_MARKER_SCALE_MAX = 1.8;
@@ -51,9 +57,11 @@ function renderPath() {
   const structure = getSelectedName(state.structures, state.selected.structureId);
   const floor = getSelectedName(state.floors, state.selected.floorId);
   if (!state.selected.campusId) {
-    dom.pathText.textContent = "Выберите кампус.";
+    dom.pathText.textContent = "";
+    dom.pathText.hidden = true;
     return;
   }
+  dom.pathText.hidden = false;
   if (state.selected.campusId && !state.selected.buildingId) {
     dom.pathText.textContent = campus;
     return;
@@ -282,6 +290,7 @@ function setMode(mode) {
     if (dom.objectKindsCard) dom.objectKindsCard.hidden = true;
     dom.emptyStateText.style.display = "none";
     applyCreateFormsVisibility("floor");
+    syncKindSelects();
     syncEntityEditCard();
     return;
   }
@@ -343,14 +352,33 @@ function isTransitionZoneTypeName(name) {
   );
 }
 
+function findTransitionZoneCatalogType() {
+  const label = TRANSITION_ZONE_TYPE_LABEL.toLowerCase();
+  return (
+    state.objectTypes.find((t) => (t.name || "").trim().toLowerCase() === label) ||
+    state.objectTypes.find((t) => isTransitionZoneTypeName(t.name)) ||
+    null
+  );
+}
+
 function transitionZoneTypeIds() {
-  const ids = state.objectTypes.filter((t) => isTransitionZoneTypeName(t.name)).map((t) => t.id);
+  const ids = state.objectTypes
+    .filter((t) => isTransitionZoneTypeName(t.name))
+    .map((t) => Number(t.id))
+    .filter((id) => Number.isFinite(id));
+  const catalogType = findTransitionZoneCatalogType();
+  if (catalogType) ids.push(Number(catalogType.id));
   return new Set(ids);
 }
 
 function transitionZoneKinds() {
   const typeIds = transitionZoneTypeIds();
-  return state.objectKinds.filter((k) => typeIds.has(k.object_type_id));
+  return state.objectKinds
+    .filter((k) => {
+      const typeId = Number(k.object_type_id);
+      return Number.isFinite(typeId) && typeIds.has(typeId);
+    })
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
 }
 
 function objectTypeNameById(id) {
@@ -390,7 +418,10 @@ function roomObjectTypeIds() {
 
 function roomKinds() {
   const typeIds = roomObjectTypeIds();
-  return state.objectKinds.filter((k) => typeIds.has(k.object_type_id));
+  return state.objectKinds.filter((k) => {
+    const typeId = Number(k.object_type_id);
+    return Number.isFinite(typeId) && typeIds.has(typeId);
+  });
 }
 
 function roomsForCorridor(corridorId) {
@@ -1126,7 +1157,7 @@ async function rollbackHierarchyCreateCancel(ctx) {
     state.selected.floorId = null;
     clearPlanView();
     state.floors = await api.getFloors(state.selected.structureId);
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
     dom.createFloorName.value = ctx.shortName || "";
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
     setMode("structure");
@@ -1142,8 +1173,8 @@ async function rollbackHierarchyCreateCancel(ctx) {
     state.selected.floorId = null;
     clearPlanView();
     state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.createStructureName.value = ctx.shortName || "";
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
     setMode("building");
@@ -1160,9 +1191,9 @@ async function rollbackHierarchyCreateCancel(ctx) {
     state.selected.floorId = null;
     clearPlanView();
     state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-    fillSelect(dom.structureSelect, [], "Введите строение", true);
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
+    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.createBuildingName.value = ctx.shortName || "";
     dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
     setMode("campus");
@@ -1363,11 +1394,13 @@ async function onCampusChange() {
   clearPlanView();
 
   state.buildings = state.selected.campusId ? await api.getBuildings(state.selected.campusId) : [];
-  fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-  fillSelect(dom.structureSelect, [], "Введите строение", true);
-  fillSelect(dom.floorSelect, [], "Введите этаж", true);
+  fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
+  fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+  fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
   renderPath();
-  dom.pageTitle.textContent = state.selected.campusId ? getSelectedName(state.campuses, state.selected.campusId) : "Админка";
+  dom.pageTitle.textContent = state.selected.campusId
+    ? getSelectedName(state.campuses, state.selected.campusId)
+    : ADMIN_HOME_PAGE_TITLE;
   setMode("campus");
   if (state.selected.campusId) {
     loadEntityImage("campus", state.selected.campusId);
@@ -1384,8 +1417,8 @@ async function onBuildingChange() {
   clearPlanView();
 
   state.structures = state.selected.buildingId ? await api.getStructures(state.selected.buildingId) : [];
-  fillSelect(dom.structureSelect, state.structures, "Введите строение");
-  fillSelect(dom.floorSelect, [], "Введите этаж", true);
+  fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
+  fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
   renderPath();
   if (state.selected.buildingId) {
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
@@ -1401,7 +1434,7 @@ async function onStructureChange() {
   clearPlanView();
 
   state.floors = state.selected.structureId ? await api.getFloors(state.selected.structureId) : [];
-  fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+  fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
   renderPath();
   if (state.selected.structureId) {
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
@@ -1426,20 +1459,21 @@ async function onFloorChange() {
 
   dom.pageTitle.textContent = getSelectedName(state.floors, state.selected.floorId);
   setMode("floor");
+  await refreshFloorTransitionZoneKinds();
   await loadFloorContext(state.selected.floorId);
   syncDeleteBranchButton();
 }
 
 async function loadInitialLists() {
   state.campuses = await api.getCampuses();
-  fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
-  fillSelect(dom.buildingSelect, [], "Введите корпус", true);
-  fillSelect(dom.structureSelect, [], "Введите строение", true);
-  fillSelect(dom.floorSelect, [], "Введите этаж", true);
+  fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
+  fillSelect(dom.buildingSelect, [], SELECT_BUILDING_PLACEHOLDER, true);
+  fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+  fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
 
   state.selected = { campusId: null, buildingId: null, structureId: null, floorId: null, planId: null };
   clearPlanView();
-  dom.pageTitle.textContent = "Админка";
+  dom.pageTitle.textContent = ADMIN_HOME_PAGE_TITLE;
   setMode("none");
   renderPath();
   syncDeleteBranchButton();
@@ -1467,7 +1501,7 @@ async function deleteSelectedBranch() {
     state.selected.floorId = null;
     clearPlanView();
     state.floors = await api.getFloors(state.selected.structureId);
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
     setMode("structure");
     loadEntityImage("structure", state.selected.structureId);
@@ -1481,8 +1515,8 @@ async function deleteSelectedBranch() {
     state.selected.floorId = null;
     clearPlanView();
     state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
     setMode("building");
     loadEntityImage("building", state.selected.buildingId);
@@ -1497,9 +1531,9 @@ async function deleteSelectedBranch() {
     state.selected.floorId = null;
     clearPlanView();
     state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-    fillSelect(dom.structureSelect, [], "Введите строение", true);
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
+    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
     setMode("campus");
     loadEntityImage("campus", state.selected.campusId);
@@ -1614,6 +1648,10 @@ function renderObjectKindsDictionary() {
 function syncKindSelects() {
   fillSelect(dom.kindSelect, transitionZoneKinds(), "Вид зоны перехода");
   fillSelect(dom.objectKindTypeSelect, state.objectTypes, "Тип объекта");
+  const tzType = findTransitionZoneCatalogType();
+  if (tzType && dom.objectKindTypeSelect && state.uiMode === "none") {
+    dom.objectKindTypeSelect.value = String(tzType.id);
+  }
 }
 
 async function loadObjectDictionaries() {
@@ -1623,6 +1661,20 @@ async function loadObjectDictionaries() {
   syncKindSelects();
   renderObjectTypesDictionary();
   renderObjectKindsDictionary();
+}
+
+/** Актуальный список видов зоны перехода для формы этажа (после правок справочника). */
+async function refreshFloorTransitionZoneKinds() {
+  const catalogType = findTransitionZoneCatalogType();
+  if (catalogType) {
+    const kindsForType = await api.getObjectKinds(catalogType.id);
+    const byId = new Map(state.objectKinds.map((k) => [Number(k.id), k]));
+    for (const k of kindsForType) byId.set(Number(k.id), k);
+    state.objectKinds = Array.from(byId.values());
+  } else {
+    state.objectKinds = await api.getObjectKinds();
+  }
+  syncKindSelects();
 }
 
 function nextFloorSortOrder() {
@@ -1698,12 +1750,16 @@ async function submitEntityMetaDialog(e) {
     return;
   }
   if (ctx.kind === "object_kind_new") {
-    await api.createObjectKind({
+    const created = await api.createObjectKind({
       object_type_id: ctx.objectTypeId,
       name: short,
       full_name: full || null,
       description: desc || null,
     });
+    const createdId = Number(created?.id);
+    if (Number.isFinite(createdId) && !state.objectKinds.some((k) => Number(k.id) === createdId)) {
+      state.objectKinds.push(created);
+    }
     closeEntityMetaDialog();
     dom.objectKindNameInput.value = "";
     await loadObjectDictionaries();
@@ -1746,7 +1802,7 @@ async function submitEntityMetaDialog(e) {
     });
     closeEntityMetaDialog();
     state.campuses = await api.getCampuses();
-    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+    fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
     dom.campusSelect.value = String(id);
     await onCampusChange();
     return;
@@ -1761,7 +1817,7 @@ async function submitEntityMetaDialog(e) {
     });
     closeEntityMetaDialog();
     state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
     dom.buildingSelect.value = String(id);
     await onBuildingChange();
     return;
@@ -1776,7 +1832,7 @@ async function submitEntityMetaDialog(e) {
     });
     closeEntityMetaDialog();
     state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
     dom.structureSelect.value = String(id);
     await onStructureChange();
     return;
@@ -1791,7 +1847,7 @@ async function submitEntityMetaDialog(e) {
     });
     closeEntityMetaDialog();
     state.floors = await api.getFloors(state.selected.structureId);
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
     dom.floorSelect.value = String(id);
     await onFloorChange();
     return;
@@ -1881,7 +1937,7 @@ dom.createCampusForm.addEventListener("submit", (e) =>
     const created = await api.createCampus({ name });
     dom.createCampusName.value = "";
     state.campuses = await api.getCampuses();
-    fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+    fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
     dom.campusSelect.value = String(created.id);
     await onCampusChange();
     openEntityMetaDialog({
@@ -1907,7 +1963,7 @@ dom.createBuildingForm.addEventListener("submit", (e) =>
     });
     dom.createBuildingName.value = "";
     state.buildings = await api.getBuildings(state.selected.campusId);
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
     dom.buildingSelect.value = String(created.id);
     await onBuildingChange();
     openEntityMetaDialog({
@@ -1934,7 +1990,7 @@ dom.createStructureForm.addEventListener("submit", (e) =>
     });
     dom.createStructureName.value = "";
     state.structures = await api.getStructures(state.selected.buildingId);
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
+    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
     dom.structureSelect.value = String(created.id);
     await onStructureChange();
     openEntityMetaDialog({
@@ -1962,7 +2018,7 @@ dom.createFloorForm.addEventListener("submit", (e) =>
     });
     dom.createFloorName.value = "";
     state.floors = await api.getFloors(state.selected.structureId);
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
     dom.floorSelect.value = String(created.id);
     await onFloorChange();
     openEntityMetaDialog({
@@ -2030,28 +2086,28 @@ dom.entityEditForm.addEventListener("submit", (e) =>
       const id = state.selected.campusId;
       await api.updateCampus(id, payload);
       state.campuses = await api.getCampuses();
-      fillSelect(dom.campusSelect, state.campuses, "Введите кампус");
+      fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
       dom.campusSelect.value = String(id);
       dom.pageTitle.textContent = getSelectedName(state.campuses, id);
     } else if (level === "building") {
       const bid = state.selected.buildingId;
       await api.updateBuilding(bid, payload);
       state.buildings = await api.getBuildings(state.selected.campusId);
-      fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
+      fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
       dom.buildingSelect.value = String(bid);
       dom.pageTitle.textContent = getSelectedName(state.buildings, bid);
     } else if (level === "structure") {
       const sid = state.selected.structureId;
       await api.updateStructure(sid, payload);
       state.structures = await api.getStructures(state.selected.buildingId);
-      fillSelect(dom.structureSelect, state.structures, "Введите строение");
+      fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
       dom.structureSelect.value = String(sid);
       dom.pageTitle.textContent = getSelectedName(state.structures, sid);
     } else {
       const fid = state.selected.floorId;
       await api.updateFloor(fid, payload);
       state.floors = await api.getFloors(state.selected.structureId);
-      fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+      fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
       dom.floorSelect.value = String(fid);
       dom.pageTitle.textContent = getSelectedName(state.floors, fid);
       await loadFloorContext(fid);
@@ -2152,9 +2208,9 @@ dom.clearBuildingBtn.addEventListener("click", () =>
     state.selected.structureId = null;
     state.selected.floorId = null;
     clearPlanView();
-    fillSelect(dom.buildingSelect, state.buildings, "Введите корпус");
-    fillSelect(dom.structureSelect, [], "Введите строение", true);
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
+    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
     setMode("campus");
     loadEntityImage("campus", state.selected.campusId);
@@ -2168,8 +2224,8 @@ dom.clearStructureBtn.addEventListener("click", () =>
     state.selected.structureId = null;
     state.selected.floorId = null;
     clearPlanView();
-    fillSelect(dom.structureSelect, state.structures, "Введите строение");
-    fillSelect(dom.floorSelect, [], "Введите этаж", true);
+    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
     dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
     setMode("building");
     loadEntityImage("building", state.selected.buildingId);
@@ -2182,7 +2238,7 @@ dom.clearFloorBtn.addEventListener("click", () =>
     if (!state.selected.structureId) return;
     state.selected.floorId = null;
     clearPlanView();
-    fillSelect(dom.floorSelect, state.floors, "Введите этаж");
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
     dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
     setMode("structure");
     loadEntityImage("structure", state.selected.structureId);
