@@ -74,7 +74,7 @@ export const dom = {
   objectForm: document.getElementById("objectForm"),
   kindSelect: document.getElementById("kindSelect"),
   nameInput: document.getElementById("nameInput"),
-  objectsTbody: document.getElementById("objectsTbody"),
+  zonesList: document.getElementById("zonesList"),
   zoneManagement: document.getElementById("zoneManagement"),
   objectTypesCard: document.getElementById("objectTypesCard"),
   objectKindsCard: document.getElementById("objectKindsCard"),

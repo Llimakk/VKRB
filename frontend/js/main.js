@@ -82,7 +82,7 @@ function clearPlanView() {
   dom.planImage.style.display = "none";
   dom.planHint.textContent = "Изображение не загружено.";
   syncDownloadButton(false);
-  dom.objectsTbody.innerHTML = "";
+  if (dom.zonesList) dom.zonesList.innerHTML = "";
   dom.planMarkers.innerHTML = "";
   state.placement.transitionZoneId = null;
   state.placement.objectId = null;
@@ -299,7 +299,7 @@ function setMode(mode) {
   dom.rightCardTitle.textContent = "";
   dom.rightCard.style.display = "none";
   dom.objectForm.style.display = "none";
-  dom.objectsTbody.innerHTML = "";
+  if (dom.zonesList) dom.zonesList.innerHTML = "";
   if (dom.dictCardsRow) dom.dictCardsRow.hidden = true;
   if (dom.objectTypesCard) dom.objectTypesCard.hidden = true;
   if (dom.objectKindsCard) dom.objectKindsCard.hidden = true;
@@ -452,106 +452,128 @@ function appendSelectPlaceholder(select, text, { selected = true } = {}) {
 
 function renderObjects() {
   const zones = state.planDetail?.transition_zones || [];
-  dom.objectsTbody.innerHTML = "";
-  for (const obj of zones) {
-    const tr = document.createElement("tr");
-    tr.dataset.transitionZoneId = String(obj.id);
-    if (state.focusedTransitionZoneId === obj.id) {
-      tr.classList.add("object-row-selected");
-    }
-
-    const markCell = document.createElement("td");
-    markCell.className = "mark-cell";
-    const mark = document.createElement("span");
-    mark.className = `mark-dot${obj.pos_x != null && obj.pos_y != null ? " is-on" : " is-off"}`;
-    mark.title = obj.pos_x != null && obj.pos_y != null ? "Отметка на плане есть" : "Отметки на плане нет";
-    markCell.appendChild(mark);
-
-    const typeCell = document.createElement("td");
-    typeCell.textContent = obj.object_kind?.name || obj.object_type.name;
-
-    const nameCell = document.createElement("td");
-    nameCell.textContent = obj.name;
-
-    const actionCell = document.createElement("td");
-    const wrap = document.createElement("div");
-    wrap.className = "actions";
-
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.textContent = "Редактировать";
-    editBtn.onclick = () => openTransitionZoneMetaDialog(obj);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.textContent = "Удалить";
-    deleteBtn.onclick = () =>
-      void run(async () => {
-        const roomCount = roomsForCorridor(obj.id).length;
-        const roomNote = roomCount
-          ? ` Также будут удалены ${roomCount} помещений.`
-          : "";
-        const confirmed = await askConfirmation({
-          title: "Удаление зоны перехода",
-          message: `Удалить зону «${obj.name}»?${roomNote}`,
-          okText: "Удалить",
-          cancelText: "Отмена",
-        });
-        if (!confirmed) return;
-        await api.deleteTransitionZone(obj.id);
-        delete state.corridorSelectedRoomId[obj.id];
-        await loadFloorContext(state.selected.floorId);
-      });
-
-    const placeBtn = document.createElement("button");
-    placeBtn.type = "button";
-    placeBtn.textContent = obj.pos_x != null && obj.pos_y != null ? "Переставить на плане" : "Указать на плане";
-    placeBtn.className = state.placement.transitionZoneId === obj.id ? "is-active" : "";
-    placeBtn.onclick = () => startPlacementForTransitionZone(obj.id);
-
-    const clearMarkBtn = document.createElement("button");
-    clearMarkBtn.type = "button";
-    clearMarkBtn.textContent = "Удалить отметку на плане";
-    clearMarkBtn.disabled = obj.pos_x == null || obj.pos_y == null;
-    clearMarkBtn.onclick = () =>
-      void run(async () => {
-        await api.updateTransitionZone(obj.id, {
-          object_kind_id: obj.object_kind.id,
-          name: obj.name,
-          pos_x: null,
-          pos_y: null,
-        });
-        if (state.placement.transitionZoneId === obj.id) {
-          state.placement.transitionZoneId = null;
-        }
-        await loadFloorContext(state.selected.floorId);
-        syncPlanHintStatus();
-      });
-
-    wrap.append(editBtn, deleteBtn);
-    wrap.append(placeBtn);
-    wrap.append(clearMarkBtn);
-    actionCell.appendChild(wrap);
-    tr.append(markCell, typeCell, nameCell, actionCell);
-    dom.objectsTbody.appendChild(tr);
-
-    if (isCorridorZone(obj)) {
-      dom.objectsTbody.appendChild(buildCorridorRoomsRow(obj));
-    }
+  if (!dom.zonesList) return;
+  dom.zonesList.innerHTML = "";
+  if (!zones.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted zones-list-empty";
+    empty.textContent = "Зон перехода пока нет. Добавьте зону формой выше.";
+    dom.zonesList.appendChild(empty);
+    return;
+  }
+  for (const zone of zones) {
+    dom.zonesList.appendChild(buildZoneSection(zone));
   }
 }
 
-function buildCorridorRoomsRow(corridor) {
-  const tr = document.createElement("tr");
-  tr.className = "corridor-rooms-row";
-  tr.dataset.corridorId = String(corridor.id);
+function buildZoneSection(zone) {
+  const accentKey = getZoneAccentKey(zone);
+  const section = document.createElement("article");
+  section.className = `zone-section zone-section--${accentKey}`;
+  section.dataset.transitionZoneId = String(zone.id);
+  if (state.focusedTransitionZoneId === zone.id) {
+    section.classList.add("is-focused");
+  }
 
+  const kindName = zone.object_kind?.name || zone.object_type?.name || "—";
+
+  const header = document.createElement("div");
+  header.className = "zone-section__header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "zone-section__title-wrap";
+
+  const mark = document.createElement("span");
+  mark.className = `mark-dot zone-section__mark${zone.pos_x != null && zone.pos_y != null ? " is-on" : " is-off"}`;
+  mark.title =
+    zone.pos_x != null && zone.pos_y != null ? "Отметка на плане есть" : "Отметки на плане нет";
+
+  const badge = document.createElement("span");
+  badge.className = "zone-section__badge";
+  badge.textContent = kindName;
+
+  const nameEl = document.createElement("h4");
+  nameEl.className = "zone-section__name";
+  nameEl.textContent = zone.name;
+
+  titleWrap.append(mark, badge, nameEl);
+
+  const actions = document.createElement("div");
+  actions.className = "zone-section__actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "btn btn--outline";
+  editBtn.textContent = "Редактировать";
+  editBtn.onclick = () => openTransitionZoneMetaDialog(zone);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "btn btn--danger";
+  deleteBtn.textContent = "Удалить";
+  deleteBtn.onclick = () =>
+    void run(async () => {
+      const roomCount = roomsForCorridor(zone.id).length;
+      const roomNote = roomCount ? ` Также будут удалены ${roomCount} помещений.` : "";
+      const confirmed = await askConfirmation({
+        title: "Удаление зоны перехода",
+        message: `Удалить зону «${zone.name}»?${roomNote}`,
+        okText: "Удалить",
+        cancelText: "Отмена",
+        destructive: true,
+      });
+      if (!confirmed) return;
+      await api.deleteTransitionZone(zone.id);
+      delete state.corridorSelectedRoomId[zone.id];
+      await loadFloorContext(state.selected.floorId);
+    });
+
+  const placeBtn = document.createElement("button");
+  placeBtn.type = "button";
+  placeBtn.className = `btn btn--outline${state.placement.transitionZoneId === zone.id ? " is-active" : ""}`;
+  placeBtn.textContent =
+    zone.pos_x != null && zone.pos_y != null ? "Переставить на плане" : "Указать на плане";
+  placeBtn.onclick = () => startPlacementForTransitionZone(zone.id);
+
+  const clearMarkBtn = document.createElement("button");
+  clearMarkBtn.type = "button";
+  clearMarkBtn.className = "btn btn--ghost";
+  clearMarkBtn.textContent = "Снять отметку";
+  clearMarkBtn.disabled = zone.pos_x == null || zone.pos_y == null;
+  clearMarkBtn.onclick = () =>
+    void run(async () => {
+      await api.updateTransitionZone(zone.id, {
+        object_kind_id: zone.object_kind.id,
+        name: zone.name,
+        pos_x: null,
+        pos_y: null,
+      });
+      if (state.placement.transitionZoneId === zone.id) {
+        state.placement.transitionZoneId = null;
+      }
+      await loadFloorContext(state.selected.floorId);
+      syncPlanHintStatus();
+    });
+
+  actions.append(editBtn, placeBtn, clearMarkBtn, deleteBtn);
+  header.append(titleWrap, actions);
+  section.appendChild(header);
+
+  if (isCorridorZone(zone)) {
+    const body = document.createElement("div");
+    body.className = "zone-section__body";
+    body.appendChild(buildCorridorRoomsPanel(zone));
+    section.appendChild(body);
+  }
+
+  return section;
+}
+
+function buildCorridorRoomsPanel(corridor) {
   const rooms = roomsForCorridor(corridor.id);
   const selectedRoomId = getSelectedRoomIdForCorridor(corridor.id);
   if (selectedRoomId) state.corridorSelectedRoomId[corridor.id] = selectedRoomId;
   const selRoom = selectedRoomId ? findRoomById(selectedRoomId) : null;
-  const td = document.createElement("td");
-  td.colSpan = 4;
 
   const panel = document.createElement("div");
   panel.className = "corridor-rooms-panel";
@@ -613,7 +635,7 @@ function buildCorridorRoomsRow(corridor) {
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
-  addBtn.className = "corridor-btn corridor-btn--accent";
+  addBtn.className = "btn btn--primary";
   addBtn.textContent =
     state.corridorAddRoomOpenId === corridor.id ? "Скрыть" : "+ Помещение";
   addBtn.onclick = () => {
@@ -632,7 +654,7 @@ function buildCorridorRoomsRow(corridor) {
 
   const editBtn = document.createElement("button");
   editBtn.type = "button";
-  editBtn.className = "corridor-btn";
+  editBtn.className = "btn btn--outline";
   editBtn.textContent = "Карточка";
   editBtn.disabled = !selectedRoomId;
   editBtn.onclick = () => {
@@ -642,7 +664,7 @@ function buildCorridorRoomsRow(corridor) {
 
   const placeBtn = document.createElement("button");
   placeBtn.type = "button";
-  placeBtn.className = `corridor-btn${state.placement.objectId === selectedRoomId ? " is-active" : ""}`;
+  placeBtn.className = `btn btn--outline${state.placement.objectId === selectedRoomId ? " is-active" : ""}`;
   placeBtn.textContent =
     selRoom?.pos_x != null && selRoom?.pos_y != null ? "На плане ✓" : "Отметить";
   placeBtn.disabled = !selectedRoomId;
@@ -653,7 +675,7 @@ function buildCorridorRoomsRow(corridor) {
 
   const clearMarkBtn = document.createElement("button");
   clearMarkBtn.type = "button";
-  clearMarkBtn.className = "corridor-btn corridor-btn--ghost";
+  clearMarkBtn.className = "btn btn--ghost";
   clearMarkBtn.textContent = "Снять отметку";
   clearMarkBtn.disabled = !selRoom || selRoom.pos_x == null || selRoom.pos_y == null;
   clearMarkBtn.onclick = () =>
@@ -675,7 +697,7 @@ function buildCorridorRoomsRow(corridor) {
 
   const deleteRoomBtn = document.createElement("button");
   deleteRoomBtn.type = "button";
-  deleteRoomBtn.className = "corridor-btn corridor-btn--danger";
+  deleteRoomBtn.className = "btn btn--danger";
   deleteRoomBtn.textContent = "Удалить";
   deleteRoomBtn.disabled = !selectedRoomId;
   deleteRoomBtn.onclick = () =>
@@ -687,6 +709,7 @@ function buildCorridorRoomsRow(corridor) {
         message: `Удалить помещение «${room.name}»?`,
         okText: "Удалить",
         cancelText: "Отмена",
+        destructive: true,
       });
       if (!confirmed) return;
       await api.deleteObject(room.id);
@@ -750,7 +773,7 @@ function buildCorridorRoomsRow(corridor) {
 
     const createBtn = document.createElement("button");
     createBtn.type = "button";
-    createBtn.className = "corridor-btn corridor-btn--accent";
+    createBtn.className = "btn btn--primary";
     createBtn.textContent = "Создать";
     createBtn.disabled = !kinds.length;
     createBtn.onclick = () =>
@@ -780,7 +803,7 @@ function buildCorridorRoomsRow(corridor) {
 
     const cancelAddBtn = document.createElement("button");
     cancelAddBtn.type = "button";
-    cancelAddBtn.className = "corridor-btn corridor-btn--ghost";
+    cancelAddBtn.className = "btn btn--ghost";
     cancelAddBtn.textContent = "Отмена";
     cancelAddBtn.onclick = () => {
       state.corridorAddRoomOpenId = null;
@@ -793,9 +816,7 @@ function buildCorridorRoomsRow(corridor) {
     panel.appendChild(addCard);
   }
 
-  td.appendChild(panel);
-  tr.appendChild(td);
-  return tr;
+  return panel;
 }
 
 /** Цвет маркера по русскому названию типа (без полей в БД). */
@@ -805,6 +826,34 @@ function markerClassByTypeName(obj) {
   if (n.includes("лестниц")) return "plan-marker--stair";
   if (n.includes("лифт")) return "plan-marker--lift";
   return "plan-marker--room";
+}
+
+function getZoneAccentKey(obj) {
+  const n = (obj.object_kind?.name || obj.object_type?.name || "").toLowerCase();
+  if (n.includes("коридор")) return "corridor";
+  if (n.includes("лестниц")) return "stair";
+  if (n.includes("лифт")) return "lift";
+  return "default";
+}
+
+function askConfirmation({
+  title,
+  message,
+  okText = "Подтвердить",
+  cancelText = "Закрыть",
+  destructive = false,
+}) {
+  dom.confirmTitle.textContent = title || "Подтверждение";
+  dom.confirmMessage.textContent = message || "";
+  dom.confirmOkBtn.textContent = okText;
+  dom.confirmCancelBtn.textContent = cancelText;
+  dom.confirmOkBtn.className = destructive ? "btn btn--danger" : "btn btn--primary";
+  dom.confirmCancelBtn.className = "btn btn--secondary";
+  dom.confirmOverlay.hidden = false;
+  dom.confirmOkBtn.focus();
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
 }
 
 /** Pixel box of the bitmap as laid out with object-fit:contain inside the img element. */
@@ -955,8 +1004,10 @@ function focusRoomInCorridor(corridorId, roomId) {
     renderPlanMarkers();
   }
   renderObjects();
-  const subRow = dom.objectsTbody.querySelector(`tr.corridor-rooms-row[data-corridor-id="${corridorId}"]`);
-  if (subRow) subRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  const section = dom.zonesList?.querySelector(
+    `.zone-section[data-transition-zone-id="${corridorId}"]`,
+  );
+  if (section) section.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function focusTransitionZoneInList(zoneId) {
@@ -967,9 +1018,11 @@ function focusTransitionZoneInList(zoneId) {
     renderPlanMarkers();
   }
   renderObjects();
-  const row = dom.objectsTbody.querySelector(`tr[data-transition-zone-id="${zoneId}"]`);
-  if (row) {
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
+  const section = dom.zonesList?.querySelector(
+    `.zone-section[data-transition-zone-id="${zoneId}"]`,
+  );
+  if (section) {
+    section.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
 
@@ -1054,18 +1107,6 @@ function closeConfirmModal(result = false) {
   const resolve = confirmResolver;
   confirmResolver = null;
   if (resolve) resolve(result);
-}
-
-function askConfirmation({ title, message, okText = "Подтвердить", cancelText = "Закрыть" }) {
-  dom.confirmTitle.textContent = title || "Подтверждение";
-  dom.confirmMessage.textContent = message || "";
-  dom.confirmOkBtn.textContent = okText;
-  dom.confirmCancelBtn.textContent = cancelText;
-  dom.confirmOverlay.hidden = false;
-  dom.confirmOkBtn.focus();
-  return new Promise((resolve) => {
-    confirmResolver = resolve;
-  });
 }
 
 function openEntityMetaDialog(ctx) {
@@ -1493,6 +1534,7 @@ async function deleteSelectedBranch() {
       "При удалении будут удалены выбранный объект, все уровни ниже по дереву и опрос. Удалить или вернуться?",
     okText: "Удалить",
     cancelText: "Вернуться",
+    destructive: true,
   });
   if (!ok) return;
 
@@ -1558,6 +1600,7 @@ function renderObjectTypesDictionary() {
 
     const editBtn = document.createElement("button");
     editBtn.type = "button";
+    editBtn.className = "btn btn--outline";
     editBtn.textContent = "Редактировать";
     editBtn.onclick = () => {
       openEntityMetaDialog({
@@ -1573,6 +1616,7 @@ function renderObjectTypesDictionary() {
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
+    deleteBtn.className = "btn btn--danger";
     deleteBtn.textContent = "Удалить";
     deleteBtn.onclick = () =>
       void run(async () => {
@@ -1581,6 +1625,7 @@ function renderObjectTypesDictionary() {
           message: `Удалить тип «${t.name}»?`,
           okText: "Удалить",
           cancelText: "Отмена",
+          destructive: true,
         });
         if (!ok) return;
         await api.deleteObjectType(t.id);
@@ -1609,6 +1654,7 @@ function renderObjectKindsDictionary() {
 
     const editBtn = document.createElement("button");
     editBtn.type = "button";
+    editBtn.className = "btn btn--outline";
     editBtn.textContent = "Редактировать";
     editBtn.onclick = () => {
       openEntityMetaDialog({
@@ -1625,6 +1671,7 @@ function renderObjectKindsDictionary() {
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
+    deleteBtn.className = "btn btn--danger";
     deleteBtn.textContent = "Удалить";
     deleteBtn.onclick = () =>
       void run(async () => {
@@ -1633,6 +1680,7 @@ function renderObjectKindsDictionary() {
           message: `Удалить вид «${k.name}»?`,
           okText: "Удалить",
           cancelText: "Отмена",
+          destructive: true,
         });
         if (!ok) return;
         await api.deleteObjectKind(k.id);

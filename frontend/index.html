@@ -36,7 +36,7 @@
         </div>
 
         <div class="sidebar-delete-spacer" aria-hidden="true"></div>
-        <button id="deleteBranchBtn" type="button" class="btn-danger-branch" disabled>Удалить объект</button>
+        <button id="deleteBranchBtn" type="button" class="btn btn--danger btn-danger-branch" disabled>Удалить объект</button>
       </aside>
 
       <section class="content">
@@ -52,21 +52,21 @@
             <div id="createCampusBlock">
               <form id="createCampusForm" class="create-form">
                 <input id="createCampusName" type="text" autocomplete="off" required />
-                <button type="submit">Создать</button>
+                <button type="submit" class="btn btn--primary">Создать</button>
               </form>
             </div>
             <div id="createChildBlock">
               <form id="createBuildingForm" class="create-form" style="display: none">
                 <input id="createBuildingName" type="text" autocomplete="off" required />
-                <button type="submit">Создать</button>
+                <button type="submit" class="btn btn--primary">Создать</button>
               </form>
               <form id="createStructureForm" class="create-form" style="display: none">
                 <input id="createStructureName" type="text" autocomplete="off" required />
-                <button type="submit">Создать</button>
+                <button type="submit" class="btn btn--primary">Создать</button>
               </form>
               <form id="createFloorForm" class="create-form" style="display: none">
                 <input id="createFloorName" type="text" autocomplete="off" required />
-                <button type="submit">Создать</button>
+                <button type="submit" class="btn btn--primary">Создать</button>
               </form>
             </div>
           </section>
@@ -101,10 +101,10 @@
               <div class="photo-toolbar">
                 <form id="imageForm" class="photo-upload-form">
                   <input id="imageInput" type="file" accept="image/*" />
-                  <button type="submit">Загрузить / заменить JPG</button>
+                  <button type="submit" class="btn btn--primary">Загрузить / заменить JPG</button>
                 </form>
-                <button id="downloadImageBtn" type="button" disabled>Скачать JPG</button>
-                <button id="deleteImageBtn" type="button">Удалить JPG</button>
+                <button id="downloadImageBtn" type="button" class="btn btn--outline" disabled>Скачать JPG</button>
+                <button id="deleteImageBtn" type="button" class="btn btn--danger">Удалить JPG</button>
               </div>
             </div>
           </section>
@@ -113,25 +113,15 @@
             <h3 id="rightCardTitle">Данные</h3>
 
             <div id="zoneManagement">
-              <p class="muted mark-legend">Серая точка в таблице — нет отметки на плане, зелёная — есть.</p>
+              <p class="mark-legend">Серая точка — нет отметки на плане; цветная — отметка есть (цвет совпадает с типом зоны).</p>
 
               <form id="objectForm" class="object-form">
                 <select id="kindSelect" required></select>
                 <input id="nameInput" required placeholder="Название зоны" />
-                <button type="submit">Добавить</button>
+                <button type="submit" class="btn btn--primary">Добавить</button>
               </form>
 
-              <table>
-                <thead>
-                  <tr>
-                    <th class="mark-col-head"></th>
-                    <th>Вид</th>
-                    <th>Название</th>
-                    <th>Действия</th>
-                  </tr>
-                </thead>
-                <tbody id="objectsTbody"></tbody>
-              </table>
+              <div id="zonesList" class="zones-list"></div>
             </div>
           </section>
 
@@ -140,7 +130,7 @@
             <h3>Типы объектов</h3>
             <form id="objectTypeForm" class="create-form">
               <input id="objectTypeNameInput" type="text" autocomplete="off" placeholder="Новый тип объекта" required />
-              <button type="submit">Добавить тип</button>
+              <button type="submit" class="btn btn--primary">Добавить тип</button>
             </form>
             <table>
               <thead>
@@ -158,7 +148,7 @@
             <form id="objectKindForm" class="object-form">
               <select id="objectKindTypeSelect" required></select>
               <input id="objectKindNameInput" type="text" autocomplete="off" placeholder="Новый вид объекта" required />
-              <button type="submit">Добавить вид</button>
+              <button type="submit" class="btn btn--primary">Добавить вид</button>
             </form>
             <table>
               <thead>
@@ -179,7 +169,7 @@
               <button
                 type="button"
                 id="entityEditToggleBtn"
-                class="btn-secondary entity-edit-toggle"
+                class="btn btn--secondary entity-edit-toggle"
                 aria-expanded="true"
                 aria-controls="entityEditCardBody"
               >
@@ -226,7 +216,7 @@
                   <input id="entityEditAddress" type="text" autocomplete="off" />
                 </div>
                 <div class="entity-edit-actions">
-                  <button type="submit">Сохранить</button>
+                  <button type="submit" class="btn btn--primary">Сохранить</button>
                 </div>
               </form>
             </div>
@@ -254,8 +244,8 @@
         <h3 id="confirmTitle">Подтверждение</h3>
         <p id="confirmMessage" class="muted confirm-message"></p>
         <div class="modal-actions">
-          <button type="button" id="confirmCancelBtn" class="btn-secondary">Закрыть</button>
-          <button type="button" id="confirmOkBtn">Подтвердить</button>
+          <button type="button" id="confirmCancelBtn" class="btn btn--secondary">Закрыть</button>
+          <button type="button" id="confirmOkBtn" class="btn btn--primary">Подтвердить</button>
         </div>
       </div>
     </div>
@@ -297,8 +287,8 @@
             <input id="entityMetaAddress" type="text" autocomplete="off" />
           </div>
           <div class="modal-actions">
-            <button type="button" id="entityMetaCancelBtn" class="btn-secondary">Отмена</button>
-            <button type="submit" id="entityMetaSubmitBtn">Сохранить</button>
+            <button type="button" id="entityMetaCancelBtn" class="btn btn--secondary">Отмена</button>
+            <button type="submit" id="entityMetaSubmitBtn" class="btn btn--primary">Сохранить</button>
           </div>
         </form>
       </div>
