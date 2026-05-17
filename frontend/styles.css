@@ -77,24 +77,23 @@ body {
 }
 
 .content-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
+  gap: 12px 20px;
+  align-items: start;
   margin-bottom: 16px;
 }
 
 .content-titles {
-  flex: 1 1 auto;
-  min-width: min(100%, 220px);
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .content-titles h1 {
   margin: 0 0 6px 0;
   font-size: 1.5rem;
   line-height: 1.35;
-  max-width: 52rem;
 }
 
 .content-titles .muted {
@@ -129,10 +128,11 @@ body {
 }
 
 .content-header .create-entity-card {
-  flex: 0 1 380px;
-  width: min(380px, 42vw);
-  max-width: 420px;
-  align-self: flex-start;
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: 400px;
+  justify-self: end;
 }
 
 .create-entity-card {
@@ -908,10 +908,20 @@ td {
     grid-template-columns: 1fr;
   }
 
+  .content-header {
+    grid-template-columns: 1fr;
+  }
+
+  .content-titles {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .content-header .create-entity-card {
-    width: 100%;
+    grid-column: 1;
+    grid-row: 2;
     max-width: none;
-    flex: 1 1 100%;
+    justify-self: stretch;
   }
 }
 
