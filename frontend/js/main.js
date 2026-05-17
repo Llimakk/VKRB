@@ -9,9 +9,11 @@ const SELECT_BUILDING_PLACEHOLDER = "Выберите корпус";
 const SELECT_STRUCTURE_PLACEHOLDER = "Выберите строение";
 const SELECT_FLOOR_PLACEHOLDER = "Выберите этаж";
 const PLAN_MARKER_SCALE_STORAGE_KEY = "vkrb_plan_marker_scale";
+const PLAN_LEGEND_HIDDEN_STORAGE_KEY = "vkrb_plan_legend_hidden";
 const PLAN_MARKER_SCALE_MIN = 0.6;
 const PLAN_MARKER_SCALE_MAX = 1.8;
 const PLAN_MARKER_SCALE_DEFAULT = 1;
+const ROOM_DUPLICATE_MESSAGE = "Помещение с таким названием уже существует на этом этаже.";
 
 const state = {
   campuses: [],
@@ -424,6 +426,79 @@ function roomKinds() {
   });
 }
 
+function roomNameComparisonKey(name) {
+  return (name || "").trim().toLocaleLowerCase("ru");
+}
+
+function isRoomObjectRecord(obj) {
+  return isRoomObjectTypeName(obj?.object_type?.name);
+}
+
+function roomNameExistsOnFloor(name, objectTypeId, excludeObjectId = null) {
+  const key = roomNameComparisonKey(name);
+  if (!key) return false;
+  const typeId = Number(objectTypeId);
+  if (!Number.isFinite(typeId)) return false;
+  for (const o of state.planDetail?.objects || []) {
+    if (excludeObjectId != null && o.id === excludeObjectId) continue;
+    if (Number(o.object_type?.id) !== typeId) continue;
+    if (!isRoomObjectRecord(o)) continue;
+    if (roomNameComparisonKey(o.name) === key) return true;
+  }
+  return false;
+}
+
+function fillRoomKindSelect(selectEl, selectedKindId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+  const kinds = roomKinds();
+  if (!kinds.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Нет видов помещения";
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+  for (const k of kinds) {
+    const opt = document.createElement("option");
+    opt.value = String(k.id);
+    opt.textContent = k.name;
+    if (Number(k.id) === Number(selectedKindId)) opt.selected = true;
+    selectEl.appendChild(opt);
+  }
+  selectEl.disabled = false;
+}
+
+function setRoomDuplicateHint(el, visible) {
+  if (!el) return;
+  if (visible) {
+    el.textContent = ROOM_DUPLICATE_MESSAGE;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+function showRoomDuplicateFromApiError() {
+  if (!dom.entityMetaOverlay?.hidden && pendingMetaContext?.kind === "room") {
+    setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, true);
+    return;
+  }
+  const inline = document.querySelector(".corridor-room-duplicate-hint");
+  setRoomDuplicateHint(inline, true);
+}
+
+function apiErrorDetail(err) {
+  if (!(err instanceof Error) || !err.message) return null;
+  try {
+    const parsed = JSON.parse(err.message);
+    return parsed?.detail ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function roomsForCorridor(corridorId) {
   return (state.planDetail?.objects || []).filter((o) => o.transition_zone_id === corridorId);
 }
@@ -719,7 +794,50 @@ function buildCorridorRoomsPanel(corridor) {
 
   picker.append(pickerLabel, select);
   actions.append(editBtn, placeBtn, clearMarkBtn, deleteRoomBtn);
-  body.append(picker, actions);
+
+  let kindRow = null;
+  if (selRoom) {
+    kindRow = document.createElement("div");
+    kindRow.className = "corridor-room-kind-row";
+    const kindLabel = document.createElement("label");
+    kindLabel.className = "corridor-rooms-picker-label";
+    kindLabel.textContent = "Вид";
+    const kindSelect = document.createElement("select");
+    kindSelect.className = "corridor-rooms-select corridor-room-kind-select";
+    kindSelect.id = `corridor-room-kind-${corridor.id}`;
+    kindLabel.htmlFor = kindSelect.id;
+    fillRoomKindSelect(kindSelect, selRoom.object_kind?.id);
+    const saveKindBtn = document.createElement("button");
+    saveKindBtn.type = "button";
+    saveKindBtn.className = "btn btn--secondary";
+    saveKindBtn.textContent = "Сохранить вид";
+    const initialKindId = Number(selRoom.object_kind?.id);
+    saveKindBtn.disabled = true;
+    kindSelect.onchange = () => {
+      saveKindBtn.disabled = Number(kindSelect.value) === initialKindId;
+    };
+    saveKindBtn.onclick = () =>
+      void run(async () => {
+        const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
+        if (!room) return;
+        const object_kind_id = Number(kindSelect.value);
+        const kind = state.objectKinds.find((k) => k.id === object_kind_id);
+        if (!kind) return;
+        await api.updateObject(room.id, {
+          transition_zone_id: room.transition_zone_id,
+          object_type_id: room.object_type.id,
+          object_kind_id,
+          name: room.name,
+          pos_x: room.pos_x ?? null,
+          pos_y: room.pos_y ?? null,
+        });
+        await loadFloorContext(state.selected.floorId);
+      });
+    kindRow.append(kindLabel, kindSelect, saveKindBtn);
+  }
+
+  if (kindRow) body.append(picker, kindRow, actions);
+  else body.append(picker, actions);
   panel.append(header, body);
 
   if (state.corridorAddRoomOpenId === corridor.id) {
@@ -766,7 +884,11 @@ function buildCorridorRoomsPanel(corridor) {
     nameInput.placeholder = "Введите наименование";
     nameInput.autocomplete = "off";
     nameInput.required = true;
-    nameField.append(nameLabel, nameInput);
+    const duplicateHint = document.createElement("p");
+    duplicateHint.className = "form-inline-error corridor-room-duplicate-hint";
+    duplicateHint.hidden = true;
+    nameField.append(nameLabel, nameInput, duplicateHint);
+    nameInput.addEventListener("input", () => setRoomDuplicateHint(duplicateHint, false));
 
     const addActions = document.createElement("div");
     addActions.className = "corridor-room-add-actions";
@@ -783,6 +905,12 @@ function buildCorridorRoomsPanel(corridor) {
         if (!object_kind_id || !name || !state.selected.planId) return;
         const kind = state.objectKinds.find((k) => k.id === object_kind_id);
         if (!kind) return;
+        if (roomNameExistsOnFloor(name, kind.object_type_id)) {
+          setRoomDuplicateHint(duplicateHint, true);
+          nameInput.focus();
+          return;
+        }
+        setRoomDuplicateHint(duplicateHint, false);
         const created = await api.createObject({
           plan_id: state.selected.planId,
           transition_zone_id: corridor.id,
@@ -834,6 +962,44 @@ function getZoneAccentKey(obj) {
   if (n.includes("лестниц")) return "stair";
   if (n.includes("лифт")) return "lift";
   return "default";
+}
+
+function isPlanLegendHidden() {
+  return localStorage.getItem(PLAN_LEGEND_HIDDEN_STORAGE_KEY) === "1";
+}
+
+function applyPlanLegendVisibility() {
+  if (!dom.planMarkerLegend || !dom.planMarkerLegendToggle) return;
+  const hidden = isPlanLegendHidden();
+  dom.planMarkerLegend.hidden = hidden;
+  dom.planMarkerLegendToggle.textContent = hidden ? "Показать подсказку" : "Скрыть подсказку";
+}
+
+function setImageModalPlacementUi(active) {
+  if (dom.imageModalStage) {
+    dom.imageModalStage.classList.toggle("image-modal-stage--placement", active);
+  }
+}
+
+function updatePlacementCursorHint(event) {
+  if (!dom.imageModalHint) return;
+  const zoneId = state.placement.transitionZoneId;
+  const objectId = state.placement.objectId;
+  if (zoneId == null && objectId == null) return;
+
+  const label =
+    zoneId != null
+      ? (state.planDetail?.transition_zones || []).find((z) => z.id === zoneId)?.name || "зона"
+      : findRoomById(objectId)?.name || "помещение";
+
+  const coords = getNormalizedImageCoordsFromEvent(event, dom.imageModalImg);
+  if (!coords) {
+    dom.imageModalHint.textContent = `Установка точки: ${label}. Курсор вне изображения.`;
+    return;
+  }
+  const xPct = (coords.x * 100).toFixed(1);
+  const yPct = (coords.y * 100).toFixed(1);
+  dom.imageModalHint.textContent = `Установка точки: ${label}. X: ${xPct}%, Y: ${yPct}% — кликните для сохранения.`;
 }
 
 function askConfirmation({
@@ -1078,10 +1244,12 @@ function openTransitionZoneMetaDialog(zone, options = {}) {
 function openImageModal(src, options = {}) {
   if (!src) return;
   dom.imageModalImg.src = normalizeImageUrl(src);
-  dom.imageModalHint.textContent = options.placementMode
-    ? `Установка точки для: ${options.objectName}. Кликните по плану.`
+  const placing = !!options.placementMode;
+  setImageModalPlacementUi(placing);
+  dom.imageModalHint.textContent = placing
+    ? `Установка точки для: ${options.objectName}. Наведите курсор для координат, кликните для сохранения.`
     : "";
-  dom.closeImageModalBtn.textContent = options.placementMode ? "Закрыть (отмена)" : "Закрыть";
+  dom.closeImageModalBtn.textContent = placing ? "Закрыть (отмена)" : "Закрыть";
   renderPlanMarkers();
   dom.imageModalOverlay.hidden = false;
 }
@@ -1094,6 +1262,7 @@ function closeImageModal() {
     renderObjects();
     renderPlanMarkers();
   }
+  setImageModalPlacementUi(false);
   dom.imageModalOverlay.hidden = true;
   dom.imageModalImg.removeAttribute("src");
   dom.imageModalHint.textContent = "";
@@ -1163,12 +1332,19 @@ function openEntityMetaDialog(ctx) {
     }
   }
   if (dom.entityMetaKindReadWrap) {
-    dom.entityMetaKindReadWrap.hidden = !(isTz || isRoom);
+    dom.entityMetaKindReadWrap.hidden = !isTz;
     if (dom.entityMetaReadKind) {
-      dom.entityMetaReadKind.value = isTz || isRoom ? ctx.objectKindName || "—" : "";
+      dom.entityMetaReadKind.value = isTz ? ctx.objectKindName || "—" : "";
+    }
+  }
+  if (dom.entityMetaKindEditWrap) {
+    dom.entityMetaKindEditWrap.hidden = !isRoom;
+    if (isRoom && dom.entityMetaKindSelect) {
+      fillRoomKindSelect(dom.entityMetaKindSelect, ctx.objectKindId);
     }
   }
   dom.entityMetaShortName.value = ctx.shortName || "";
+  setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
   dom.entityMetaFullName.value = ctx.fullName ?? "";
   dom.entityMetaDescription.value = ctx.description ?? "";
   dom.entityMetaAddress.value = "";
@@ -1188,6 +1364,7 @@ function closeEntityMetaDialog() {
   dom.entityMetaOverlay.hidden = true;
   pendingMetaContext = null;
   dom.entityMetaForm.reset();
+  setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
 }
 
 async function rollbackHierarchyCreateCancel(ctx) {
@@ -1924,14 +2101,22 @@ async function submitEntityMetaDialog(e) {
     return;
   }
   if (ctx.kind === "room") {
-    const object_kind_id = ctx.objectKindId;
+    const object_kind_id = Number(dom.entityMetaKindSelect?.value) || ctx.objectKindId;
     const object_type_id = ctx.objectTypeId;
     const transition_zone_id = ctx.parentId;
     if (!object_kind_id || !object_type_id || !transition_zone_id) return;
+    const kind = state.objectKinds.find((k) => k.id === object_kind_id);
+    const resolvedTypeId = kind?.object_type_id ?? object_type_id;
+    if (roomNameExistsOnFloor(short, resolvedTypeId, id)) {
+      setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, true);
+      dom.entityMetaShortName.focus();
+      return;
+    }
+    setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
     const room = findRoomById(id);
     await api.updateObject(id, {
       transition_zone_id,
-      object_type_id,
+      object_type_id: resolvedTypeId,
       object_kind_id,
       name: short,
       number: numVal,
@@ -2177,6 +2362,11 @@ dom.planImage.addEventListener("click", () => {
   openImageModal(src, { placementMode: false });
 });
 
+dom.imageModalStage.addEventListener("mousemove", (e) => {
+  if (state.placement.transitionZoneId == null && state.placement.objectId == null) return;
+  updatePlacementCursorHint(e);
+});
+
 dom.imageModalStage.addEventListener("click", (e) =>
   run(async () => {
     if (state.placement.transitionZoneId == null && state.placement.objectId == null) return;
@@ -2395,7 +2585,20 @@ async function run(fn) {
     await fn();
   } catch (e) {
     console.error("[VKRB]", e);
+    if (apiErrorDetail(e) === "room_name_exists_on_floor") {
+      showRoomDuplicateFromApiError();
+    }
   }
+}
+
+function initPlanMarkerLegend() {
+  applyPlanLegendVisibility();
+  if (!dom.planMarkerLegendToggle) return;
+  dom.planMarkerLegendToggle.addEventListener("click", () => {
+    const nextHidden = !isPlanLegendHidden();
+    localStorage.setItem(PLAN_LEGEND_HIDDEN_STORAGE_KEY, nextHidden ? "1" : "0");
+    applyPlanLegendVisibility();
+  });
 }
 
 function initPlanMarkerLayoutListeners() {
@@ -2409,9 +2612,14 @@ function initPlanMarkerLayoutListeners() {
   ro.observe(dom.imageModalStage);
 }
 
+dom.entityMetaShortName?.addEventListener("input", () => {
+  setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
+});
+
 run(async () => {
   await Promise.all([loadInitialLists(), loadObjectDictionaries()]);
   initPlanMarkerScale();
+  initPlanMarkerLegend();
   initPlanMarkerLayoutListeners();
   applyEntityEditCollapsedUi();
 });

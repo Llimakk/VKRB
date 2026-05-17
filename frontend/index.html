@@ -82,9 +82,18 @@
               </div>
               <p id="planHint" class="muted">Изображение не загружено.</p>
               <div id="planFloorTools" class="plan-floor-tools" hidden>
-                <p id="planMarkerLegend" class="muted plan-marker-legend">
-                  коридор — фиолетовый, лестница — оранжевый, лифт — зелёный, помещение — голубой
-                </p>
+                <div class="plan-marker-legend-row">
+                  <p id="planMarkerLegend" class="muted plan-marker-legend">
+                    коридор — фиолетовый, лестница — оранжевый, лифт — зелёный, помещение — голубой
+                  </p>
+                  <button
+                    type="button"
+                    id="planMarkerLegendToggle"
+                    class="btn btn--xs plan-marker-legend-toggle"
+                  >
+                    Скрыть подсказку
+                  </button>
+                </div>
                 <div id="planMarkerScaleWrap" class="plan-marker-scale-wrap">
                   <label for="planMarkerScale" class="plan-marker-scale-label">Размер точек</label>
                   <input
@@ -270,9 +279,16 @@
             <label for="entityMetaReadKind">Вид</label>
             <input id="entityMetaReadKind" type="text" readonly />
           </div>
+          <div id="entityMetaKindEditWrap" hidden>
+            <label for="entityMetaKindSelect">Вид</label>
+            <select id="entityMetaKindSelect" required></select>
+          </div>
           <div>
             <label for="entityMetaShortName">Краткое имя</label>
             <input id="entityMetaShortName" type="text" autocomplete="off" />
+            <p id="entityMetaRoomDuplicateHint" class="form-inline-error" hidden>
+              Помещение с таким названием уже существует на этом этаже.
+            </p>
           </div>
           <div>
             <label for="entityMetaFullName">Полное наименование</label>

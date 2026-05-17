@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -36,6 +37,31 @@ def _sync_object_number(db: Session, obj: Object) -> None:
         db.refresh(obj)
 
 
+def _normalized_object_name(name: str) -> str:
+    return name.strip()
+
+
+def _object_name_exists_on_plan(
+    db: Session,
+    *,
+    plan_id: int,
+    object_type_id: int,
+    name: str,
+    exclude_object_id: int | None = None,
+) -> bool:
+    normalized = _normalized_object_name(name)
+    if not normalized:
+        return False
+    q = db.query(Object.id).filter(
+        Object.plan_id == plan_id,
+        Object.object_type_id == object_type_id,
+        func.lower(Object.name) == normalized.lower(),
+    )
+    if exclude_object_id is not None:
+        q = q.filter(Object.id != exclude_object_id)
+    return q.first() is not None
+
+
 @router.get("/floors/{floor_id}/objects", response_model=list[ObjectOut])
 def list_objects_by_floor(floor_id: int, db: Session = Depends(get_db)):
     plan = db.query(Plan).filter(Plan.floor_id == floor_id).one_or_none()
@@ -71,12 +97,21 @@ def create_object(payload: ObjectCreate, db: Session = Depends(get_db)):
     if object_kind.object_type_id != payload.object_type_id:
         raise HTTPException(status_code=400, detail="Object kind does not belong to selected object type")
 
+    name = _normalized_object_name(payload.name)
+    if _object_name_exists_on_plan(
+        db,
+        plan_id=payload.plan_id,
+        object_type_id=payload.object_type_id,
+        name=name,
+    ):
+        raise HTTPException(status_code=409, detail="room_name_exists_on_floor")
+
     obj = Object(
         plan_id=payload.plan_id,
         transition_zone_id=payload.transition_zone_id,
         object_type_id=payload.object_type_id,
         object_kind_id=payload.object_kind_id,
-        name=payload.name.strip(),
+        name=name,
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
     )
@@ -116,10 +151,20 @@ def update_object(object_id: int, payload: ObjectUpdate, db: Session = Depends(g
     if object_kind.object_type_id != payload.object_type_id:
         raise HTTPException(status_code=400, detail="Object kind does not belong to selected object type")
 
+    name = _normalized_object_name(payload.name)
+    if _object_name_exists_on_plan(
+        db,
+        plan_id=obj.plan_id,
+        object_type_id=payload.object_type_id,
+        name=name,
+        exclude_object_id=obj.id,
+    ):
+        raise HTTPException(status_code=409, detail="room_name_exists_on_floor")
+
     obj.transition_zone_id = payload.transition_zone_id
     obj.object_type_id = payload.object_type_id
     obj.object_kind_id = payload.object_kind_id
-    obj.name = payload.name.strip()
+    obj.name = name
     obj.pos_x = payload.pos_x
     obj.pos_y = payload.pos_y
     data = payload.model_dump(exclude_unset=True)
