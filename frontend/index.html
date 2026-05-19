@@ -9,30 +9,37 @@
   <body>
     <main class="layout">
       <aside class="sidebar">
-        <h2>Дерево</h2>
-
-        <label>Кампус</label>
-        <div class="select-row">
-          <select id="campusSelect"></select>
-          <button id="clearCampusBtn" type="button">✕</button>
+        <div class="sidebar-tree-top">
+          <button type="button" id="treeHomeBtn" class="btn btn--secondary tree-home-btn">
+            К началу
+          </button>
+          <h2 class="sidebar-tree-title">Дерево</h2>
         </div>
 
-        <label>Корпус</label>
-        <div class="select-row">
-          <select id="buildingSelect" disabled></select>
-          <button id="clearBuildingBtn" type="button">✕</button>
-        </div>
+        <nav
+          id="treeBreadcrumb"
+          class="tree-breadcrumb tree-breadcrumb--sidebar"
+          hidden
+          aria-label="Путь в дереве"
+        ></nav>
 
-        <label>Строение</label>
-        <div class="select-row">
-          <select id="structureSelect" disabled></select>
-          <button id="clearStructureBtn" type="button">✕</button>
-        </div>
-
-        <label>Этаж</label>
-        <div class="select-row">
-          <select id="floorSelect" disabled></select>
-          <button id="clearFloorBtn" type="button">✕</button>
+        <div class="sidebar-tree-fields">
+          <div class="sidebar-tree-level">
+            <label for="campusSelect">Кампус</label>
+            <select id="campusSelect" class="sidebar-select"></select>
+          </div>
+          <div class="sidebar-tree-level">
+            <label for="buildingSelect">Корпус</label>
+            <select id="buildingSelect" class="sidebar-select" disabled></select>
+          </div>
+          <div class="sidebar-tree-level">
+            <label for="structureSelect">Строение</label>
+            <select id="structureSelect" class="sidebar-select" disabled></select>
+          </div>
+          <div class="sidebar-tree-level">
+            <label for="floorSelect">Этаж</label>
+            <select id="floorSelect" class="sidebar-select" disabled></select>
+          </div>
         </div>
 
         <div class="sidebar-delete-spacer" aria-hidden="true"></div>
@@ -43,7 +50,7 @@
         <div class="content-header">
           <div class="content-titles">
             <h1 id="pageTitle">Панель администратора для заполнения информации об объектах университета</h1>
-            <p id="pathText" class="muted" hidden></p>
+            <nav id="pathText" class="tree-breadcrumb tree-breadcrumb--header muted" hidden aria-label="Текущий путь"></nav>
             <p id="emptyStateText" class="muted">Создайте кампус или выберите существующий в дереве.</p>
           </div>
 

@@ -53,30 +53,221 @@ function syncDeleteBranchButton() {
   dom.deleteBranchBtn.disabled = !state.selected.campusId;
 }
 
+function getBreadcrumbSegments() {
+  const segments = [];
+  if (state.selected.campusId) {
+    segments.push({
+      level: "campus",
+      name: getSelectedName(state.campuses, state.selected.campusId),
+    });
+  }
+  if (state.selected.buildingId) {
+    segments.push({
+      level: "building",
+      name: getSelectedName(state.buildings, state.selected.buildingId),
+    });
+  }
+  if (state.selected.structureId) {
+    segments.push({
+      level: "structure",
+      name: getSelectedName(state.structures, state.selected.structureId),
+    });
+  }
+  if (state.selected.floorId) {
+    segments.push({
+      level: "floor",
+      name: getSelectedName(state.floors, state.selected.floorId),
+    });
+  }
+  return segments;
+}
+
+function renderBreadcrumbInto(container) {
+  if (!container) return;
+  container.innerHTML = "";
+  const segments = getBreadcrumbSegments();
+  if (!segments.length) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+  const activeLevel = state.uiMode === "none" ? null : state.uiMode;
+  const isSidebarPath = container.classList.contains("tree-breadcrumb--sidebar");
+
+  if (isSidebarPath) {
+    const list = document.createElement("ol");
+    list.className = "tree-path-list";
+    segments.forEach((seg) => {
+      const li = document.createElement("li");
+      li.className = "tree-path-list__item";
+      if (activeLevel === seg.level) {
+        li.classList.add("is-active");
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tree-path-list__btn";
+      btn.textContent = seg.name;
+      btn.dataset.level = seg.level;
+      btn.title = seg.name;
+      if (activeLevel === seg.level) {
+        btn.setAttribute("aria-current", "location");
+      }
+      btn.addEventListener("click", () => {
+        void run(() => navigateToLevel(seg.level));
+      });
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+    container.appendChild(list);
+    return;
+  }
+
+  segments.forEach((seg, index) => {
+    if (index > 0) {
+      const sep = document.createElement("span");
+      sep.className = "tree-breadcrumb-sep";
+      sep.setAttribute("aria-hidden", "true");
+      sep.textContent = "›";
+      container.appendChild(sep);
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tree-breadcrumb-seg";
+    btn.textContent = seg.name;
+    btn.dataset.level = seg.level;
+    btn.title = seg.name;
+    if (activeLevel === seg.level) {
+      btn.classList.add("is-active");
+      btn.setAttribute("aria-current", "location");
+    }
+    btn.addEventListener("click", () => {
+      void run(() => navigateToLevel(seg.level));
+    });
+    container.appendChild(btn);
+  });
+}
+
 function renderPath() {
-  const campus = getSelectedName(state.campuses, state.selected.campusId);
-  const building = getSelectedName(state.buildings, state.selected.buildingId);
-  const structure = getSelectedName(state.structures, state.selected.structureId);
-  const floor = getSelectedName(state.floors, state.selected.floorId);
+  renderBreadcrumbInto(dom.treeBreadcrumb);
+  renderBreadcrumbInto(dom.pathText);
+}
+
+function syncSelectsFromState() {
+  if (state.selected.campusId) {
+    dom.campusSelect.value = String(state.selected.campusId);
+  } else {
+    dom.campusSelect.value = "";
+  }
+
+  const hasCampus = !!state.selected.campusId;
+  dom.buildingSelect.disabled = !hasCampus || !state.buildings.length;
+  if (state.selected.buildingId && state.buildings.some((b) => b.id === state.selected.buildingId)) {
+    dom.buildingSelect.value = String(state.selected.buildingId);
+  } else if (!state.selected.buildingId) {
+    dom.buildingSelect.value = "";
+  }
+
+  const hasBuilding = !!state.selected.buildingId;
+  dom.structureSelect.disabled = !hasBuilding || !state.structures.length;
+  if (state.selected.structureId && state.structures.some((s) => s.id === state.selected.structureId)) {
+    dom.structureSelect.value = String(state.selected.structureId);
+  } else if (!state.selected.structureId) {
+    dom.structureSelect.value = "";
+  }
+
+  const hasStructure = !!state.selected.structureId;
+  dom.floorSelect.disabled = !hasStructure || !state.floors.length;
+  if (state.selected.floorId && state.floors.some((f) => f.id === state.selected.floorId)) {
+    dom.floorSelect.value = String(state.selected.floorId);
+  } else if (!state.selected.floorId) {
+    dom.floorSelect.value = "";
+  }
+}
+
+async function ensureBranchListsLoaded() {
+  if (state.selected.campusId && !state.buildings.length) {
+    state.buildings = await api.getBuildings(state.selected.campusId);
+    fillSelect(
+      dom.buildingSelect,
+      state.buildings,
+      SELECT_BUILDING_PLACEHOLDER,
+      false,
+      state.selected.buildingId,
+    );
+  }
+  if (state.selected.buildingId && !state.structures.length) {
+    state.structures = await api.getStructures(state.selected.buildingId);
+    fillSelect(
+      dom.structureSelect,
+      state.structures,
+      SELECT_STRUCTURE_PLACEHOLDER,
+      false,
+      state.selected.structureId,
+    );
+  }
+  if (state.selected.structureId && !state.floors.length) {
+    state.floors = await api.getFloors(state.selected.structureId);
+    fillSelect(
+      dom.floorSelect,
+      state.floors,
+      SELECT_FLOOR_PLACEHOLDER,
+      false,
+      state.selected.floorId,
+    );
+  }
+  syncSelectsFromState();
+}
+
+async function navigateToLevel(level) {
+  if (level === "campus" && !state.selected.campusId) return;
+  if (level === "building" && !state.selected.buildingId) return;
+  if (level === "structure" && !state.selected.structureId) return;
+  if (level === "floor" && !state.selected.floorId) return;
+
+  await ensureBranchListsLoaded();
+  syncSelectsFromState();
+
+  if (level !== "floor") {
+    clearPlanView();
+  }
+
+  if (level === "campus") {
+    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
+    setMode("campus");
+    loadEntityImage("campus", state.selected.campusId);
+  } else if (level === "building") {
+    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
+    setMode("building");
+    loadEntityImage("building", state.selected.buildingId);
+  } else if (level === "structure") {
+    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+    setMode("structure");
+    loadEntityImage("structure", state.selected.structureId);
+  } else if (level === "floor") {
+    dom.pageTitle.textContent = getSelectedName(state.floors, state.selected.floorId);
+    setMode("floor");
+    await refreshFloorTransitionZoneKinds();
+    await loadFloorContext(state.selected.floorId);
+  }
+
+  renderPath();
+  syncDeleteBranchButton();
+  syncEntityEditCard();
+}
+
+async function navigateToHome() {
   if (!state.selected.campusId) {
-    dom.pathText.textContent = "";
-    dom.pathText.hidden = true;
+    await loadInitialLists();
     return;
   }
-  dom.pathText.hidden = false;
-  if (state.selected.campusId && !state.selected.buildingId) {
-    dom.pathText.textContent = campus;
-    return;
-  }
-  if (state.selected.buildingId && !state.selected.structureId) {
-    dom.pathText.textContent = `${campus} / ${building}`;
-    return;
-  }
-  if (state.selected.structureId && !state.selected.floorId) {
-    dom.pathText.textContent = `${campus} / ${building} / ${structure}`;
-    return;
-  }
-  dom.pathText.textContent = `${campus} / ${building} / ${structure} / ${floor}`;
+  await ensureBranchListsLoaded();
+  syncSelectsFromState();
+  clearPlanView();
+  dom.pageTitle.textContent = ADMIN_HOME_PAGE_TITLE;
+  setMode("none");
+  renderPath();
+  syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 function clearPlanView() {
@@ -730,7 +921,7 @@ function buildCorridorRoomsPanel(corridor) {
   const editBtn = document.createElement("button");
   editBtn.type = "button";
   editBtn.className = "btn btn--outline";
-  editBtn.textContent = "Карточка";
+  editBtn.textContent = "Подробнее";
   editBtn.disabled = !selectedRoomId;
   editBtn.onclick = () => {
     const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
@@ -795,49 +986,7 @@ function buildCorridorRoomsPanel(corridor) {
   picker.append(pickerLabel, select);
   actions.append(editBtn, placeBtn, clearMarkBtn, deleteRoomBtn);
 
-  let kindRow = null;
-  if (selRoom) {
-    kindRow = document.createElement("div");
-    kindRow.className = "corridor-room-kind-row";
-    const kindLabel = document.createElement("label");
-    kindLabel.className = "corridor-rooms-picker-label";
-    kindLabel.textContent = "Вид";
-    const kindSelect = document.createElement("select");
-    kindSelect.className = "corridor-rooms-select corridor-room-kind-select";
-    kindSelect.id = `corridor-room-kind-${corridor.id}`;
-    kindLabel.htmlFor = kindSelect.id;
-    fillRoomKindSelect(kindSelect, selRoom.object_kind?.id);
-    const saveKindBtn = document.createElement("button");
-    saveKindBtn.type = "button";
-    saveKindBtn.className = "btn btn--secondary";
-    saveKindBtn.textContent = "Сохранить вид";
-    const initialKindId = Number(selRoom.object_kind?.id);
-    saveKindBtn.disabled = true;
-    kindSelect.onchange = () => {
-      saveKindBtn.disabled = Number(kindSelect.value) === initialKindId;
-    };
-    saveKindBtn.onclick = () =>
-      void run(async () => {
-        const room = findRoomById(getSelectedRoomIdForCorridor(corridor.id));
-        if (!room) return;
-        const object_kind_id = Number(kindSelect.value);
-        const kind = state.objectKinds.find((k) => k.id === object_kind_id);
-        if (!kind) return;
-        await api.updateObject(room.id, {
-          transition_zone_id: room.transition_zone_id,
-          object_type_id: room.object_type.id,
-          object_kind_id,
-          name: room.name,
-          pos_x: room.pos_x ?? null,
-          pos_y: room.pos_y ?? null,
-        });
-        await loadFloorContext(state.selected.floorId);
-      });
-    kindRow.append(kindLabel, kindSelect, saveKindBtn);
-  }
-
-  if (kindRow) body.append(picker, kindRow, actions);
-  else body.append(picker, actions);
+  body.append(picker, actions);
   panel.append(header, body);
 
   if (state.corridorAddRoomOpenId === corridor.id) {
@@ -1605,73 +1754,96 @@ async function loadFloorContext(floorId) {
 }
 
 async function onCampusChange() {
-  state.selected.campusId = Number(dom.campusSelect.value) || null;
+  const newId = Number(dom.campusSelect.value) || null;
+  if (newId === state.selected.campusId) return;
+  if (!newId) {
+    await loadInitialLists();
+    return;
+  }
+
+  state.selected.campusId = newId;
   state.selected.buildingId = null;
   state.selected.structureId = null;
   state.selected.floorId = null;
   clearPlanView();
 
-  state.buildings = state.selected.campusId ? await api.getBuildings(state.selected.campusId) : [];
+  state.buildings = await api.getBuildings(state.selected.campusId);
+  state.structures = [];
+  state.floors = [];
   fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
   fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
   fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
-  renderPath();
-  dom.pageTitle.textContent = state.selected.campusId
-    ? getSelectedName(state.campuses, state.selected.campusId)
-    : ADMIN_HOME_PAGE_TITLE;
+  dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
   setMode("campus");
-  if (state.selected.campusId) {
-    loadEntityImage("campus", state.selected.campusId);
-  } else {
-    clearPlanView();
-  }
+  loadEntityImage("campus", state.selected.campusId);
+  renderPath();
   syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 async function onBuildingChange() {
-  state.selected.buildingId = Number(dom.buildingSelect.value) || null;
+  const newId = Number(dom.buildingSelect.value) || null;
+  if (newId === state.selected.buildingId) return;
+
+  state.selected.buildingId = newId;
   state.selected.structureId = null;
   state.selected.floorId = null;
   clearPlanView();
 
-  state.structures = state.selected.buildingId ? await api.getStructures(state.selected.buildingId) : [];
+  if (!newId) {
+    state.structures = [];
+    state.floors = [];
+    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
+    await navigateToLevel("campus");
+    return;
+  }
+
+  state.structures = await api.getStructures(state.selected.buildingId);
+  state.floors = [];
   fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
   fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
+  dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
+  setMode("building");
+  loadEntityImage("building", state.selected.buildingId);
   renderPath();
-  if (state.selected.buildingId) {
-    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
-    setMode("building");
-    loadEntityImage("building", state.selected.buildingId);
-  }
   syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 async function onStructureChange() {
-  state.selected.structureId = Number(dom.structureSelect.value) || null;
+  const newId = Number(dom.structureSelect.value) || null;
+  if (newId === state.selected.structureId) return;
+
+  state.selected.structureId = newId;
   state.selected.floorId = null;
   clearPlanView();
 
-  state.floors = state.selected.structureId ? await api.getFloors(state.selected.structureId) : [];
-  fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
-  renderPath();
-  if (state.selected.structureId) {
-    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
-    setMode("structure");
-    loadEntityImage("structure", state.selected.structureId);
+  if (!newId) {
+    state.floors = [];
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
+    await navigateToLevel("building");
+    return;
   }
+
+  state.floors = await api.getFloors(state.selected.structureId);
+  fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
+  dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
+  setMode("structure");
+  loadEntityImage("structure", state.selected.structureId);
+  renderPath();
   syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 async function onFloorChange() {
-  state.selected.floorId = Number(dom.floorSelect.value) || null;
-  renderPath();
-  if (!state.selected.floorId) {
+  const newId = Number(dom.floorSelect.value) || null;
+  if (newId === state.selected.floorId) return;
+
+  state.selected.floorId = newId;
+  if (!newId) {
     clearPlanView();
-    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
-    setMode("structure");
-    if (state.selected.structureId) loadEntityImage("structure", state.selected.structureId);
-    renderPath();
-    syncDeleteBranchButton();
+    await navigateToLevel("structure");
     return;
   }
 
@@ -1679,7 +1851,9 @@ async function onFloorChange() {
   setMode("floor");
   await refreshFloorTransitionZoneKinds();
   await loadFloorContext(state.selected.floorId);
+  renderPath();
   syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 async function loadInitialLists() {
@@ -1695,6 +1869,7 @@ async function loadInitialLists() {
   setMode("none");
   renderPath();
   syncDeleteBranchButton();
+  syncEntityEditCard();
 }
 
 async function deleteSelectedBranch() {
@@ -2434,56 +2609,9 @@ dom.campusSelect.addEventListener("change", () => run(onCampusChange));
 dom.buildingSelect.addEventListener("change", () => run(onBuildingChange));
 dom.structureSelect.addEventListener("change", () => run(onStructureChange));
 dom.floorSelect.addEventListener("change", () => run(onFloorChange));
-dom.clearCampusBtn.addEventListener("click", () =>
-  run(async () => {
-    await loadInitialLists();
-  }),
-);
-dom.clearBuildingBtn.addEventListener("click", () =>
-  run(async () => {
-    if (!state.selected.campusId) return;
-    state.selected.buildingId = null;
-    state.selected.structureId = null;
-    state.selected.floorId = null;
-    clearPlanView();
-    fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
-    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
-    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
-    dom.pageTitle.textContent = getSelectedName(state.campuses, state.selected.campusId);
-    setMode("campus");
-    loadEntityImage("campus", state.selected.campusId);
-    renderPath();
-    syncDeleteBranchButton();
-  }),
-);
-dom.clearStructureBtn.addEventListener("click", () =>
-  run(async () => {
-    if (!state.selected.buildingId) return;
-    state.selected.structureId = null;
-    state.selected.floorId = null;
-    clearPlanView();
-    fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
-    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
-    dom.pageTitle.textContent = getSelectedName(state.buildings, state.selected.buildingId);
-    setMode("building");
-    loadEntityImage("building", state.selected.buildingId);
-    renderPath();
-    syncDeleteBranchButton();
-  }),
-);
-dom.clearFloorBtn.addEventListener("click", () =>
-  run(async () => {
-    if (!state.selected.structureId) return;
-    state.selected.floorId = null;
-    clearPlanView();
-    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
-    dom.pageTitle.textContent = getSelectedName(state.structures, state.selected.structureId);
-    setMode("structure");
-    loadEntityImage("structure", state.selected.structureId);
-    renderPath();
-    syncDeleteBranchButton();
-  }),
-);
+if (dom.treeHomeBtn) {
+  dom.treeHomeBtn.addEventListener("click", () => run(navigateToHome));
+}
 
 dom.deleteBranchBtn.addEventListener("click", () =>
   run(async () => {

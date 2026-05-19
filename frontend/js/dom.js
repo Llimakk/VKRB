@@ -3,10 +3,8 @@ export const dom = {
   buildingSelect: document.getElementById("buildingSelect"),
   structureSelect: document.getElementById("structureSelect"),
   floorSelect: document.getElementById("floorSelect"),
-  clearCampusBtn: document.getElementById("clearCampusBtn"),
-  clearBuildingBtn: document.getElementById("clearBuildingBtn"),
-  clearStructureBtn: document.getElementById("clearStructureBtn"),
-  clearFloorBtn: document.getElementById("clearFloorBtn"),
+  treeBreadcrumb: document.getElementById("treeBreadcrumb"),
+  treeHomeBtn: document.getElementById("treeHomeBtn"),
   pathText: document.getElementById("pathText"),
   emptyStateText: document.getElementById("emptyStateText"),
   deleteBranchBtn: document.getElementById("deleteBranchBtn"),
@@ -104,19 +102,22 @@ export const dom = {
   createFloorName: document.getElementById("createFloorName"),
 };
 
-export function fillSelect(selectEl, items, placeholder, disabled = false) {
+export function fillSelect(selectEl, items, placeholder, disabled = false, selectedId = null) {
   selectEl.innerHTML = "";
   const first = document.createElement("option");
   first.value = "";
   first.textContent = placeholder;
   first.disabled = true;
-  first.selected = true;
+  first.selected = selectedId == null;
   first.hidden = true;
   selectEl.appendChild(first);
   for (const item of items) {
     const option = document.createElement("option");
-    option.value = item.id;
+    option.value = String(item.id);
     option.textContent = item.name;
+    if (selectedId != null && Number(item.id) === Number(selectedId)) {
+      option.selected = true;
+    }
     selectEl.appendChild(option);
   }
   selectEl.disabled = disabled || items.length === 0;

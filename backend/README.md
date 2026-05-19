@@ -10,6 +10,7 @@ Backend для админки (без навигации и авторизаци
 docker compose up --build
 ```
 
+Админка (frontend): `http://localhost:5173`  
 API: `http://localhost:8000/docs`
 
 ### venv (локально)
