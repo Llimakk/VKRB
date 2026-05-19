@@ -42,8 +42,6 @@
           </div>
         </div>
 
-        <div class="sidebar-delete-spacer" aria-hidden="true"></div>
-        <button id="deleteBranchBtn" type="button" class="btn btn--danger btn-danger-branch" disabled>Удалить объект</button>
       </aside>
 
       <section class="content">
@@ -192,6 +190,14 @@
                 Свернуть
               </button>
             </div>
+            <p
+              id="entityEditUnsavedBanner"
+              class="entity-edit-unsaved-banner"
+              hidden
+              role="status"
+            >
+              Несохранённые изменения
+            </p>
             <div id="entityEditCardBody" class="entity-edit-card-body">
               <div class="entity-edit-section entity-edit-readonly-block">
                 <dl class="entity-edit-dl">
@@ -232,6 +238,9 @@
                   <input id="entityEditAddress" type="text" autocomplete="off" />
                 </div>
                 <div class="entity-edit-actions">
+                  <button type="button" id="deleteBranchBtn" class="btn btn--danger" disabled>
+                    Удалить объект
+                  </button>
                   <button type="submit" class="btn btn--primary">Сохранить</button>
                 </div>
               </form>

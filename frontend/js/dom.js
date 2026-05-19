@@ -25,6 +25,7 @@ export const dom = {
   entityEditFullName: document.getElementById("entityEditFullName"),
   entityEditDescription: document.getElementById("entityEditDescription"),
   entityEditAddress: document.getElementById("entityEditAddress"),
+  entityEditUnsavedBanner: document.getElementById("entityEditUnsavedBanner"),
   imageModalOverlay: document.getElementById("imageModalOverlay"),
   imageModalStage: document.getElementById("imageModalStage"),
   imageModalImg: document.getElementById("imageModalImg"),

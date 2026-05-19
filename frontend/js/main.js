@@ -49,8 +49,20 @@ function getSelectedName(items, id) {
   return items.find((i) => i.id === Number(id))?.name || "-";
 }
 
+const DELETE_BRANCH_LABELS = {
+  campus: "Удалить кампус",
+  building: "Удалить корпус",
+  structure: "Удалить строение",
+  floor: "Удалить этаж",
+};
+
 function syncDeleteBranchButton() {
-  dom.deleteBranchBtn.disabled = !state.selected.campusId;
+  if (!dom.deleteBranchBtn) return;
+  const hasCampus = Boolean(state.selected.campusId);
+  dom.deleteBranchBtn.disabled = !hasCampus;
+  dom.deleteBranchBtn.textContent = hasCampus
+    ? DELETE_BRANCH_LABELS[getRenameLevel()] || "Удалить объект"
+    : "Удалить объект";
 }
 
 function getBreadcrumbSegments() {
@@ -321,6 +333,86 @@ const HIER_TYPE_KIND = {
 
 const ENTITY_EDIT_EXPANDED_KEY = "vkrb_entity_edit_expanded";
 
+/** Снимок полей формы для текущего объекта в карточке (level:id). */
+let entityEditBaseline = null;
+
+/** Объект карточки редактирования — по текущему режиму просмотра (uiMode), не по самому глубокому select. */
+function pickEntityEditCardRow() {
+  const level = state.uiMode;
+  if (level === "none" || !state.selected.campusId) {
+    return { level: null, row: null };
+  }
+  if (level === "floor") {
+    if (!state.selected.floorId) return { level: null, row: null };
+    return {
+      level,
+      row: state.floors.find((f) => f.id === state.selected.floorId) ?? null,
+    };
+  }
+  if (level === "structure") {
+    if (!state.selected.structureId) return { level: null, row: null };
+    return {
+      level,
+      row: state.structures.find((s) => s.id === state.selected.structureId) ?? null,
+    };
+  }
+  if (level === "building") {
+    if (!state.selected.buildingId) return { level: null, row: null };
+    return {
+      level,
+      row: state.buildings.find((b) => b.id === state.selected.buildingId) ?? null,
+    };
+  }
+  return {
+    level: "campus",
+    row: state.campuses.find((c) => c.id === state.selected.campusId) ?? null,
+  };
+}
+
+function resolveEntityEditCardTarget() {
+  const { level, row } = pickEntityEditCardRow();
+  if (!level || !row) {
+    return { visible: false, key: null, level: null, row: null };
+  }
+  return { visible: true, key: `${level}:${row.id}`, level, row };
+}
+
+function readEntityEditFormValues() {
+  return {
+    shortName: dom.entityEditShortName?.value ?? "",
+    fullName: dom.entityEditFullName?.value ?? "",
+    description: dom.entityEditDescription?.value ?? "",
+    address: dom.entityEditAddress?.value ?? "",
+  };
+}
+
+function entityEditFormDirty() {
+  if (!entityEditBaseline) return false;
+  const v = readEntityEditFormValues();
+  return (
+    v.shortName !== entityEditBaseline.shortName ||
+    v.fullName !== entityEditBaseline.fullName ||
+    v.description !== entityEditBaseline.description ||
+    v.address !== entityEditBaseline.address
+  );
+}
+
+function commitEntityEditBaselineFromRow(level, row) {
+  entityEditBaseline = {
+    key: `${level}:${row.id}`,
+    shortName: row.name || "",
+    fullName: row.full_name || "",
+    description: row.description || "",
+    address: row.address || "",
+  };
+}
+
+function syncEntityEditUnsavedBanner() {
+  const banner = dom.entityEditUnsavedBanner;
+  if (!banner) return;
+  banner.hidden = Boolean(dom.entityEditCard?.hidden) || !entityEditFormDirty();
+}
+
 function isEntityEditExpanded() {
   return localStorage.getItem(ENTITY_EDIT_EXPANDED_KEY) !== "0";
 }
@@ -344,17 +436,7 @@ function getRenameLevel() {
 }
 
 function pickHierEntityRow() {
-  const level = getRenameLevel();
-  if (level === "floor") {
-    return { level, row: state.floors.find((f) => f.id === state.selected.floorId) ?? null };
-  }
-  if (level === "structure") {
-    return { level, row: state.structures.find((s) => s.id === state.selected.structureId) ?? null };
-  }
-  if (level === "building") {
-    return { level, row: state.buildings.find((b) => b.id === state.selected.buildingId) ?? null };
-  }
-  return { level: "campus", row: state.campuses.find((c) => c.id === state.selected.campusId) ?? null };
+  return pickEntityEditCardRow();
 }
 
 function photoUrlForEntityEdit(level, row) {
@@ -388,22 +470,18 @@ function syncContentGridLayout() {
 
 function syncEntityEditCard() {
   if (!dom.entityEditCard) return;
-  if (state.uiMode === "none") {
+
+  const target = resolveEntityEditCardTarget();
+
+  if (!target.visible) {
     dom.entityEditCard.hidden = true;
+    entityEditBaseline = null;
+    syncEntityEditUnsavedBanner();
     syncContentGridLayout();
     return;
   }
-  if (!state.selected.campusId) {
-    dom.entityEditCard.hidden = true;
-    syncContentGridLayout();
-    return;
-  }
-  const { level, row } = pickHierEntityRow();
-  if (!row) {
-    dom.entityEditCard.hidden = true;
-    syncContentGridLayout();
-    return;
-  }
+
+  const { level, row } = target;
   dom.entityEditCard.hidden = false;
   dom.entityEditTitle.textContent = ENTITY_EDIT_TITLES[level] || "Объект";
   dom.entityEditReadId.textContent = String(row.id);
@@ -425,7 +503,9 @@ function syncEntityEditCard() {
   dom.entityEditFullName.value = row.full_name || "";
   dom.entityEditDescription.value = row.description || "";
   dom.entityEditAddress.value = row.address || "";
+  commitEntityEditBaselineFromRow(level, row);
   applyEntityEditCollapsedUi();
+  syncEntityEditUnsavedBanner();
   syncContentGridLayout();
 }
 
@@ -1883,7 +1963,7 @@ async function deleteSelectedBranch() {
   const ok = await askConfirmation({
     title: "Удаление объекта",
     message:
-      "При удалении будут удалены выбранный объект, все уровни ниже по дереву и опрос. Удалить или вернуться?",
+      "Будут удалены выбранный объект и все уровни ниже по дереву. Удалить или вернуться?",
     okText: "Удалить",
     cancelText: "Вернуться",
     destructive: true,
@@ -2477,7 +2557,8 @@ dom.entityEditToggleBtn?.addEventListener("click", () => {
 dom.entityEditForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
-    const level = getRenameLevel();
+    const { level, row } = pickEntityEditCardRow();
+    if (!level || !row) return;
     const short = dom.entityEditShortName.value.trim();
     if (!short) return;
     const full = dom.entityEditFullName.value.trim() || null;
@@ -2524,6 +2605,15 @@ dom.entityEditForm.addEventListener("submit", (e) =>
     syncEntityEditCard();
   }),
 );
+
+for (const el of [
+  dom.entityEditShortName,
+  dom.entityEditFullName,
+  dom.entityEditDescription,
+  dom.entityEditAddress,
+]) {
+  el?.addEventListener("input", () => syncEntityEditUnsavedBanner());
+}
 
 dom.closeImageModalBtn.addEventListener("click", () => closeImageModal());
 
