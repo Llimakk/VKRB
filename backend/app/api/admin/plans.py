@@ -1,4 +1,5 @@
 import mimetypes
+import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.exc import IntegrityError
@@ -46,9 +47,13 @@ def get_plans_tree(db: Session = Depends(get_db)):
                 floors = (
                     db.query(Floor)
                     .filter(Floor.structure_id == s.id)
-                    .order_by(Floor.sort_order, Floor.name)
                     .all()
                 )
+                # Higher floor (by numeric part of name) → top of list
+                floors.sort(key=lambda fl: (
+                    -int(m.group()) if (m := re.search(r"\d+", fl.name or "")) else 0,
+                    fl.name or "",
+                ))
                 floors_out: list[dict] = []
                 for f in floors:
                     plan = db.query(Plan).filter(Plan.floor_id == f.id).one_or_none()

@@ -16,6 +16,7 @@ export interface Connection {
   from_id: string;
   to_id: string;
   weight: number;    // routing cost: 1.0 = normal, >1 = slower (stairs, elevator)
+  waypoints?: { x: number; y: number }[]; // optional bend points (in from→to direction)
 }
 
 export interface Polygon {
@@ -80,6 +81,7 @@ export interface PlanGraphData {
     to_node_id: number;
     distance: number;   // computed by backend, metres
     weight: number;
+    waypoints?: { x: number; y: number }[] | null;
   }>;
   objects: DbObject[];
 }
@@ -103,6 +105,7 @@ export interface SavePayload {
     from_client_id: string;
     to_client_id: string;
     weight: number;
+    waypoints?: { x: number; y: number }[];
   }>;
   object_polygons: Array<{
     object_id: number;

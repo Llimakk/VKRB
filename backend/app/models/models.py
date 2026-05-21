@@ -185,6 +185,8 @@ class NavEdge(Base):
     distance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # Весовой коэффициент для алгоритма маршрутизации (1.0 = норма, >1 = медленнее/сложнее)
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # Промежуточные точки изгиба ребра в пиксельных координатах плана: [{"x": ..., "y": ...}, ...]
+    waypoints: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     from_node: Mapped["NavNode"] = relationship(back_populates="edges_from", foreign_keys=[from_node_id])
     to_node: Mapped["NavNode"] = relationship(back_populates="edges_to", foreign_keys=[to_node_id])

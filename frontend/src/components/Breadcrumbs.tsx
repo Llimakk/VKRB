@@ -31,7 +31,11 @@ function getSiblings(
   const isFloorLevel = index === breadcrumbs.length - 1;
   if (isFloorLevel) {
     return [...(current as Array<{ id: number; name: string; sort_order?: number }>)]
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      .sort((a, b) => {
+        const na = parseInt(a.name.match(/\d+/)?.[0] ?? '0', 10);
+        const nb = parseInt(b.name.match(/\d+/)?.[0] ?? '0', 10);
+        return nb - na;
+      });
   }
   return current as Array<{ id: number; name: string }>;
 }

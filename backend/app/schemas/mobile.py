@@ -50,10 +50,12 @@ class MobileObjectOnPlan(BaseModel):
 
 class MobileObjectSearchResult(BaseModel):
     id: int
+    kind: str = "object"           # "object" — DB Object; "node" — bare NavNode (e.g. exit)
     name: str
     description: Optional[str] = None
-    object_type_id: int
-    object_type_name: str
+    object_type_id: Optional[int] = None
+    object_type_name: str           # for "node" entries — human-readable node type label
+    node_type: Optional[str] = None  # entry node type (room/toilet/exit/...) when known
     floor_id: int
     floor_name: str
     structure_id: int
@@ -108,8 +110,11 @@ class MobileFloorPlanResponse(BaseModel):
 
 
 class RouteRequest(BaseModel):
-    from_object_id: int
-    to_object_id: int
+    # Exactly one of (from_object_id, from_node_id) and (to_object_id, to_node_id) must be set.
+    from_object_id: Optional[int] = None
+    to_object_id: Optional[int] = None
+    from_node_id: Optional[int] = None
+    to_node_id: Optional[int] = None
 
 
 class RouteStep(BaseModel):
@@ -142,8 +147,10 @@ class PlanSegment(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    from_object_id: int
-    to_object_id: int
+    from_object_id: Optional[int] = None
+    to_object_id: Optional[int] = None
+    from_node_id: Optional[int] = None
+    to_node_id: Optional[int] = None
     total_distance: float  # metres
     steps: list[RouteStep]
     segments: list[PlanSegment]

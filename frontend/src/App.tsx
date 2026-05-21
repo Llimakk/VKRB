@@ -247,7 +247,16 @@ function App() {
         {showValidation && (
           <ValidationPanel
             onClose={() => setShowValidation(false)}
-            onFocus={(t) => setPan({ x: -t.x + window.innerWidth / 2 - 88, y: -t.y + window.innerHeight / 2 })}
+            onFocus={(t) => {
+              // pan/zoom transform: screen-inside-main = pan + svgCoord * zoom
+              // Center of main: (mainWidth/2, mainHeight/2). Solve for pan.
+              const leftAside = 88;
+              const rightAside = showRightPanel ? 248 : 16;
+              const headerH = 48;
+              const mainW = window.innerWidth - leftAside - rightAside;
+              const mainH = window.innerHeight - headerH;
+              setPan({ x: mainW / 2 - t.x * zoom, y: mainH / 2 - t.y * zoom });
+            }}
           />
         )}
 

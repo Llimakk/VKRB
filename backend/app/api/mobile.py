@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +30,12 @@ from app.services.routing import compute_route
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
 
+def _floor_sort_key(fl: Floor) -> tuple[int, str]:
+    """Sort floors so higher floors come first (Floor 9 → Floor 1). Falls back to name."""
+    m = re.search(r"\d+", fl.name or "")
+    return (-int(m.group()) if m else 0, fl.name or "")
+
+
 @router.get("/tree", response_model=list[MobileCampusItem])
 def get_tree(db: Session = Depends(get_db)):
     campuses = db.query(Campus).order_by(Campus.name).all()
@@ -49,12 +56,14 @@ def get_tree(db: Session = Depends(get_db)):
                 .all()
             ):
                 floors_out = []
-                for f in (
+                floors_query = (
                     db.query(Floor)
                     .filter(Floor.structure_id == s.id)
-                    .order_by(Floor.sort_order, Floor.name)
                     .all()
-                ):
+                )
+                # Sort by floor number extracted from name, descending (higher floor → top).
+                floors_query.sort(key=_floor_sort_key)
+                for f in floors_query:
                     plan = db.query(Plan).filter(Plan.floor_id == f.id).one_or_none()
                     floors_out.append(
                         MobileFloorItem(
@@ -79,6 +88,18 @@ def get_tree(db: Session = Depends(get_db)):
     return result
 
 
+NAV_ONLY_TYPES = {"exit"}           # node types without Object representation
+NODE_TYPE_LABELS = {
+    "exit":     "Вход",
+    "stairs":   "Лестница",
+    "elevator": "Лифт",
+    "toilet":   "Туалет",
+    "room":     "Помещение",
+    "corridor": "Коридор",
+    "passage":  "Переход",
+}
+
+
 @router.get("/objects/search", response_model=list[MobileObjectSearchResult])
 def search_objects(
     q: Optional[str] = None,
@@ -86,60 +107,123 @@ def search_objects(
     node_type: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Object).options(
-        joinedload(Object.object_type),
-        joinedload(Object.plan)
-        .joinedload(Plan.floor)
-        .joinedload(Floor.structure)
-        .joinedload(Structure.building)
-        .joinedload(Building.campus),
-    )
-    if q:
-        query = query.filter(Object.name.ilike(f"%{q}%"))
-    if type_id is not None:
-        query = query.filter(Object.object_type_id == type_id)
-    if node_type is not None:
-        query = (
-            query
-            .join(ObjectEntryNode, ObjectEntryNode.object_id == Object.id)
-            .join(NavNode, NavNode.id == ObjectEntryNode.nav_node_id)
-            .filter(NavNode.node_type == node_type)
-            .distinct()
-        )
-    if q:
-        relevance = case(
-            (Object.name.ilike(q), 0),
-            (Object.name.ilike(f"{q}%"), 1),
-            else_=2,
-        )
-        query = query.order_by(relevance, Object.name)
-    else:
-        query = query.order_by(Object.name)
-    objects = query.limit(100).all()
+    results: list[MobileObjectSearchResult] = []
 
-    results = []
-    for o in objects:
-        floor = o.plan.floor
-        structure = floor.structure
-        building = structure.building
-        campus = building.campus
-        results.append(
-            MobileObjectSearchResult(
-                id=o.id,
-                name=o.name,
-                description=o.description,
-                object_type_id=o.object_type.id,
-                object_type_name=o.object_type.name,
-                floor_id=floor.id,
-                floor_name=floor.name,
-                structure_id=structure.id,
-                structure_name=structure.name,
-                building_id=building.id,
-                building_name=building.name,
-                campus_id=campus.id,
-                campus_name=campus.name,
-            )
+    # 1. Object-based search (rooms, toilets — entries with polygons)
+    include_objects = node_type is None or node_type not in NAV_ONLY_TYPES
+    if include_objects:
+        query = db.query(Object).options(
+            joinedload(Object.object_type),
+            joinedload(Object.plan)
+            .joinedload(Plan.floor)
+            .joinedload(Floor.structure)
+            .joinedload(Structure.building)
+            .joinedload(Building.campus),
         )
+        if q:
+            query = query.filter(Object.name.ilike(f"%{q}%"))
+        if type_id is not None:
+            query = query.filter(Object.object_type_id == type_id)
+        if node_type is not None:
+            query = (
+                query
+                .join(ObjectEntryNode, ObjectEntryNode.object_id == Object.id)
+                .join(NavNode, NavNode.id == ObjectEntryNode.nav_node_id)
+                .filter(NavNode.node_type == node_type)
+                .distinct()
+            )
+        if q:
+            relevance = case(
+                (Object.name.ilike(q), 0),
+                (Object.name.ilike(f"{q}%"), 1),
+                else_=2,
+            )
+            query = query.order_by(relevance, Object.name)
+        else:
+            query = query.order_by(Object.name)
+        objects = query.limit(100).all()
+
+        for o in objects:
+            floor = o.plan.floor
+            structure = floor.structure
+            building = structure.building
+            campus = building.campus
+            # Best-effort: pick the first entry node's type for `node_type` display
+            entry_type: Optional[str] = None
+            entry = (
+                db.query(NavNode.node_type)
+                .join(ObjectEntryNode, ObjectEntryNode.nav_node_id == NavNode.id)
+                .filter(ObjectEntryNode.object_id == o.id)
+                .first()
+            )
+            if entry:
+                entry_type = entry[0]
+            results.append(
+                MobileObjectSearchResult(
+                    id=o.id,
+                    kind="object",
+                    name=o.name,
+                    description=o.description,
+                    object_type_id=o.object_type.id,
+                    object_type_name=o.object_type.name,
+                    node_type=entry_type,
+                    floor_id=floor.id,
+                    floor_name=floor.name,
+                    structure_id=structure.id,
+                    structure_name=structure.name,
+                    building_id=building.id,
+                    building_name=building.name,
+                    campus_id=campus.id,
+                    campus_name=campus.name,
+                )
+            )
+
+    # 2. NavNode-based search for types without Objects (exits)
+    include_nodes = node_type is None or node_type in NAV_ONLY_TYPES
+    if include_nodes:
+        wanted = {node_type} if node_type else NAV_ONLY_TYPES
+        nav_q = (
+            db.query(NavNode, Floor, Structure, Building, Campus)
+            .join(Plan, NavNode.plan_id == Plan.id)
+            .join(Floor, Plan.floor_id == Floor.id)
+            .join(Structure, Floor.structure_id == Structure.id)
+            .join(Building, Structure.building_id == Building.id)
+            .join(Campus, Building.campus_id == Campus.id)
+            .filter(NavNode.node_type.in_(wanted))
+        )
+        if q:
+            nav_q = nav_q.filter(NavNode.name.ilike(f"%{q}%"))
+            relevance = case(
+                (NavNode.name.ilike(q), 0),
+                (NavNode.name.ilike(f"{q}%"), 1),
+                else_=2,
+            )
+            nav_q = nav_q.order_by(relevance, NavNode.name)
+        else:
+            nav_q = nav_q.order_by(NavNode.name)
+        for n, floor, structure, building, campus in nav_q.limit(100).all():
+            if not n.name:
+                continue   # skip unnamed nodes — nothing to display
+            results.append(
+                MobileObjectSearchResult(
+                    id=n.id,
+                    kind="node",
+                    name=n.name,
+                    description=None,
+                    object_type_id=None,
+                    object_type_name=NODE_TYPE_LABELS.get(n.node_type, n.node_type),
+                    node_type=n.node_type,
+                    floor_id=floor.id,
+                    floor_name=floor.name,
+                    structure_id=structure.id,
+                    structure_name=structure.name,
+                    building_id=building.id,
+                    building_name=building.name,
+                    campus_id=campus.id,
+                    campus_name=campus.name,
+                )
+            )
+
     return results
 
 
@@ -294,11 +378,17 @@ def build_route(
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
+    if (payload.from_object_id is None) == (payload.from_node_id is None):
+        raise HTTPException(status_code=400, detail="Specify exactly one of from_object_id / from_node_id")
+    if (payload.to_object_id is None) == (payload.to_node_id is None):
+        raise HTTPException(status_code=400, detail="Specify exactly one of to_object_id / to_node_id")
     try:
         route = compute_route(
             db,
-            payload.from_object_id,
-            payload.to_object_id,
+            from_object_id=payload.from_object_id,
+            to_object_id=payload.to_object_id,
+            from_node_id=payload.from_node_id,
+            to_node_id=payload.to_node_id,
             avoid_stairs=bool(user and user.avoid_stairs),
         )
     except ValueError as e:
@@ -307,6 +397,8 @@ def build_route(
     return RouteResponse(
         from_object_id=route.from_object_id,
         to_object_id=route.to_object_id,
+        from_node_id=route.from_node_id,
+        to_node_id=route.to_node_id,
         total_distance=route.total_distance,
         steps=[
             RouteStep(

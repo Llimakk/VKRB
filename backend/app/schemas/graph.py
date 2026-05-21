@@ -30,6 +30,7 @@ class NavEdgeIn(BaseModel):
     from_client_id: str
     to_client_id: str
     weight: float = 1.0  # routing coefficient (1.0 = normal, >1 = slower/harder)
+    waypoints: Optional[list[dict]] = None  # [{"x": float, "y": float}, ...]
 
 
 class ObjectPolygonIn(BaseModel):
@@ -92,6 +93,7 @@ class NavEdgeOut(BaseModel):
     to_node_id: int
     distance: float
     weight: float
+    waypoints: Optional[list[dict]] = None
 
 
 class ObjectWithPolygonOut(BaseModel):

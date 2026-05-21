@@ -277,7 +277,11 @@ export const LandingPage: React.FC = () => {
               <select style={structure ? selectStyle : disabledSelect} disabled={!structure} value={floorId} onChange={e => setFloorId(Number(e.target.value) || '')}>
                 <option value="">— выберите этаж —</option>
                 {structure?.floors
-                  .slice().sort((a, b) => a.sort_order - b.sort_order)
+                  .slice().sort((a, b) => {
+                    const na = parseInt(a.name.match(/\d+/)?.[0] ?? '0', 10);
+                    const nb = parseInt(b.name.match(/\d+/)?.[0] ?? '0', 10);
+                    return nb - na;
+                  })
                   .map(f => <option key={f.id} value={f.id}>{f.name}{f.plan ? '' : ' (нет плана)'}</option>)
                 }
               </select>

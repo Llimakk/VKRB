@@ -100,8 +100,10 @@ class PlanSegmentData:
 
 @dataclass
 class RouteData:
-    from_object_id: int
-    to_object_id: int
+    from_object_id: Optional[int]
+    to_object_id: Optional[int]
+    from_node_id: Optional[int]
+    to_node_id: Optional[int]
     total_distance: float
     steps: list[RouteStepData]
     segments: list[PlanSegmentData]
@@ -116,6 +118,8 @@ def _load_graph(
     dict[int, _Node],                      # nodes
     # edge_costs: (min_id, max_id) → cost
     dict[tuple[int, int], float],
+    # edge_waypoints: (from_id, to_id) as stored → list of {x, y}; reversed on opposite traversal
+    dict[tuple[int, int], list[dict]],
 ]:
     rows = (
         db.query(NavNode, Floor.id, Floor.name, Floor.sort_order,
@@ -148,6 +152,7 @@ def _load_graph(
 
     adjacency: dict[int, list[tuple[int, float]]] = {nid: [] for nid in nodes}
     edge_costs: dict[tuple[int, int], float] = {}
+    edge_waypoints: dict[tuple[int, int], list[dict]] = {}
 
     for edge in db.query(NavEdge).all():
         cost = edge.distance * edge.weight
@@ -157,6 +162,8 @@ def _load_graph(
             key = (min(edge.from_node_id, edge.to_node_id),
                    max(edge.from_node_id, edge.to_node_id))
             edge_costs[key] = cost
+            if edge.waypoints:
+                edge_waypoints[(edge.from_node_id, edge.to_node_id)] = edge.waypoints
 
     # Inter-floor virtual edges (stairs/elevator scoped to same structure)
     inter_floor: dict[tuple[str, str, str], list[int]] = defaultdict(list)
@@ -213,7 +220,7 @@ def _load_graph(
             key = (min(a.id, b.id), max(a.id, b.id))
             edge_costs[key] = cost
 
-    return adjacency, nodes, edge_costs
+    return adjacency, nodes, edge_costs, edge_waypoints
 
 
 # ── Dijkstra ──────────────────────────────────────────────────────────────────
@@ -720,35 +727,48 @@ def _plan_meta(db: Session, plan_ids: set[int]) -> dict[int, _PlanMeta]:
 STAIRS_AVOID_PENALTY = 100_000.0
 
 
+def _resolve_endpoints(
+    db: Session,
+    object_id: Optional[int],
+    node_id: Optional[int],
+    label: str,
+) -> list[int]:
+    """Resolve an endpoint (object or bare node) to a list of candidate nav_node ids."""
+    if node_id is not None:
+        node = db.query(NavNode).filter(NavNode.id == node_id).one_or_none()
+        if node is None:
+            raise ValueError(f"Node {node_id} not found ({label})")
+        return [node.id]
+    if object_id is not None:
+        if not db.query(Object).filter(Object.id == object_id).one_or_none():
+            raise ValueError(f"Object {object_id} not found ({label})")
+        entries = [r.nav_node_id for r in db.query(ObjectEntryNode)
+                   .filter(ObjectEntryNode.object_id == object_id).all()]
+        if not entries:
+            raise ValueError(f"Object {object_id} has no entry nodes assigned ({label})")
+        return entries
+    raise ValueError(f"No endpoint specified for {label}")
+
+
 def compute_route(
     db: Session,
-    from_object_id: int,
-    to_object_id: int,
+    from_object_id: Optional[int] = None,
+    to_object_id: Optional[int] = None,
+    from_node_id: Optional[int] = None,
+    to_node_id: Optional[int] = None,
     avoid_stairs: bool = False,
 ) -> RouteData:
     """
-    Raises ValueError if objects or their nav_nodes are missing, or no path exists.
+    Raises ValueError if endpoints or their nav_nodes are missing, or no path exists.
 
+    Endpoints can be either an Object (with entry nodes) or a bare NavNode (e.g. an exit).
     avoid_stairs: when True, edges touching stairs nodes are heavily penalized,
     so Dijkstra prefers elevators / level transitions when an alternative exists.
     """
-    if not db.query(Object).filter(Object.id == from_object_id).one_or_none():
-        raise ValueError(f"Object {from_object_id} not found")
-    if not db.query(Object).filter(Object.id == to_object_id).one_or_none():
-        raise ValueError(f"Object {to_object_id} not found")
+    starts = _resolve_endpoints(db, from_object_id, from_node_id, "from")
+    ends   = _resolve_endpoints(db, to_object_id, to_node_id, "to")
 
-    starts = [r.nav_node_id for r in db.query(ObjectEntryNode)
-              .filter(ObjectEntryNode.object_id == from_object_id).all()]
-    ends = [r.nav_node_id for r in db.query(ObjectEntryNode)
-            .filter(ObjectEntryNode.object_id == to_object_id).all()]
-
-    if not starts:
-        raise ValueError(
-            f"Object {from_object_id} has no entry nodes assigned")
-    if not ends:
-        raise ValueError(f"Object {to_object_id} has no entry nodes assigned")
-
-    adjacency, nodes, edge_costs = _load_graph(db)
+    adjacency, nodes, edge_costs, edge_waypoints = _load_graph(db)
 
     if avoid_stairs:
         stairs_ids = {nid for nid, n in nodes.items() if n.node_type == "stairs"}
@@ -762,11 +782,9 @@ def compute_route(
     starts = [s for s in starts if s in nodes]
     ends = [e for e in ends if e in nodes]
     if not starts:
-        raise ValueError(
-            f"Object {from_object_id}: entry nodes not found in graph")
+        raise ValueError("from: endpoints not found in graph")
     if not ends:
-        raise ValueError(
-            f"Object {to_object_id}: entry nodes not found in graph")
+        raise ValueError("to: endpoints not found in graph")
 
     total_dist, path = _dijkstra(adjacency, starts, ends)
 
@@ -778,6 +796,23 @@ def compute_route(
     # Build plan segments (consecutive nodes on the same plan → one polyline)
     plan_ids = {nodes[nid].plan_id for nid in path}
     metas = _plan_meta(db, plan_ids)
+
+    def _segment_polyline(seg_nodes: list[_Node]) -> list[dict]:
+        """Build a polyline through seg_nodes, inserting each edge's waypoints between adjacent pair."""
+        if not seg_nodes:
+            return []
+        pts: list[dict] = [{"x": seg_nodes[0].x, "y": seg_nodes[0].y}]
+        for i in range(1, len(seg_nodes)):
+            a, b = seg_nodes[i - 1].id, seg_nodes[i].id
+            wps = edge_waypoints.get((a, b))
+            if wps is None:
+                wps_rev = edge_waypoints.get((b, a))
+                if wps_rev is not None:
+                    wps = list(reversed(wps_rev))
+            if wps:
+                pts.extend({"x": float(w["x"]), "y": float(w["y"])} for w in wps)
+            pts.append({"x": seg_nodes[i].x, "y": seg_nodes[i].y})
+        return pts
 
     segments: list[PlanSegmentData] = []
     cur_plan_id = nodes[path[0]].plan_id
@@ -794,8 +829,7 @@ def compute_route(
                 plan_photo_url=meta.photo_url,
                 image_pixel_width=meta.image_pixel_width,
                 image_pixel_height=meta.image_pixel_height,
-                polyline=_simplify_polyline(
-                    cur_seg_nodes, POLYLINE_SIMPLIFY_EPSILON),
+                polyline=_segment_polyline(cur_seg_nodes),
             ))
             cur_plan_id = node.plan_id
             cur_floor_id = node.floor_id
@@ -809,12 +843,14 @@ def compute_route(
         plan_photo_url=meta.photo_url,
         image_pixel_width=meta.image_pixel_width,
         image_pixel_height=meta.image_pixel_height,
-        polyline=_simplify_polyline(cur_seg_nodes, POLYLINE_SIMPLIFY_EPSILON),
+        polyline=_segment_polyline(cur_seg_nodes),
     ))
 
     return RouteData(
         from_object_id=from_object_id,
         to_object_id=to_object_id,
+        from_node_id=from_node_id,
+        to_node_id=to_node_id,
         total_distance=round(total_dist, 1),
         steps=steps,
         segments=segments,

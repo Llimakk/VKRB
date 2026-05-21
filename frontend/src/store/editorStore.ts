@@ -48,6 +48,9 @@ interface EditorStore extends EditorState {
   // Connections
   addConnection: (from_id: string, to_id: string, weight?: number) => void;
   removeConnection: (from_id: string, to_id: string) => void;
+  addWaypoint: (from_id: string, to_id: string, index: number, point: { x: number; y: number }) => void;
+  moveWaypoint: (from_id: string, to_id: string, index: number, point: { x: number; y: number }) => void;
+  removeWaypoint: (from_id: string, to_id: string, index: number) => void;
 
   // Polygons
   addPolygon: (polygon: Polygon) => void;
@@ -205,6 +208,69 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         c => !(c.from_id === from_id && c.to_id === to_id) &&
              !(c.from_id === to_id   && c.to_id === from_id)
       ),
+    });
+    get().saveHistory();
+  },
+
+  addWaypoint: (from_id, to_id, index, point) => {
+    const { connections } = get();
+    set({
+      connections: connections.map(c => {
+        // Match in either stored direction. If stored as to→from, insert in reversed order.
+        if (c.from_id === from_id && c.to_id === to_id) {
+          const wps = c.waypoints ? [...c.waypoints] : [];
+          wps.splice(index, 0, point);
+          return { ...c, waypoints: wps };
+        }
+        if (c.from_id === to_id && c.to_id === from_id) {
+          const wps = c.waypoints ? [...c.waypoints] : [];
+          // index is in the from→to direction; convert to stored direction
+          const storedIndex = wps.length - index;
+          wps.splice(storedIndex, 0, point);
+          return { ...c, waypoints: wps };
+        }
+        return c;
+      }),
+    });
+    get().saveHistory();
+  },
+
+  moveWaypoint: (from_id, to_id, index, point) => {
+    const { connections } = get();
+    set({
+      connections: connections.map(c => {
+        if (c.from_id === from_id && c.to_id === to_id && c.waypoints) {
+          const wps = [...c.waypoints];
+          wps[index] = point;
+          return { ...c, waypoints: wps };
+        }
+        if (c.from_id === to_id && c.to_id === from_id && c.waypoints) {
+          const wps = [...c.waypoints];
+          const storedIndex = wps.length - 1 - index;
+          wps[storedIndex] = point;
+          return { ...c, waypoints: wps };
+        }
+        return c;
+      }),
+    });
+    // No saveHistory here — called on mouseup via stopDrag
+  },
+
+  removeWaypoint: (from_id, to_id, index) => {
+    const { connections } = get();
+    set({
+      connections: connections.map(c => {
+        if (c.from_id === from_id && c.to_id === to_id && c.waypoints) {
+          const wps = c.waypoints.filter((_, i) => i !== index);
+          return { ...c, waypoints: wps.length > 0 ? wps : undefined };
+        }
+        if (c.from_id === to_id && c.to_id === from_id && c.waypoints) {
+          const storedIndex = c.waypoints.length - 1 - index;
+          const wps = c.waypoints.filter((_, i) => i !== storedIndex);
+          return { ...c, waypoints: wps.length > 0 ? wps : undefined };
+        }
+        return c;
+      }),
     });
     get().saveHistory();
   },
@@ -401,6 +467,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       from_id: String(e.from_node_id),
       to_id:   String(e.to_node_id),
       weight:  e.weight,
+      waypoints: e.waypoints ?? undefined,
     }));
 
     const polygons: Polygon[] = data.objects
@@ -446,6 +513,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       from_client_id: c.from_id,
       to_client_id:   c.to_id,
       weight:         c.weight,
+      waypoints:      c.waypoints && c.waypoints.length > 0 ? c.waypoints : undefined,
     }));
 
     const object_polygons = s.polygons

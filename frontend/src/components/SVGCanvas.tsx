@@ -38,6 +38,9 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     removePolygon,
     addConnection,
     removeConnection,
+    addWaypoint,
+    moveWaypoint,
+    removeWaypoint,
     movePoint,
     movePolygonVertex,
     setSelectedPoints,
@@ -60,6 +63,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   // Edit mode drag state — polygon vertices
   const [draggingVertex, setDraggingVertex] = useState<{ polyIdx: number; vtxIdx: number } | null>(null);
   const draggingVertexRef = useRef<{ polyIdx: number; vtxIdx: number } | null>(null);
+  const draggingWaypointRef = useRef<{ fromId: string; toId: string; index: number } | null>(null);
   const isDragging = useRef(false);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
 
@@ -192,6 +196,12 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
       movePolygonVertex(draggingVertexRef.current.polyIdx, draggingVertexRef.current.vtxIdx, { x, y });
     }
 
+    if (draggingWaypointRef.current !== null && mode === 'edit') {
+      isDragging.current = true;
+      const { fromId, toId, index } = draggingWaypointRef.current;
+      moveWaypoint(fromId, toId, index, { x, y });
+    }
+
     if (mode === 'polygon' && polygonPoints.length >= 3) {
       const first = polygonPoints[0];
       setIsNearFirst(Math.hypot(x - first.x, y - first.y) <= CLOSE_SNAP_RADIUS);
@@ -201,11 +211,12 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
   };
 
   const stopDrag = () => {
-    if (draggingId !== null || draggingVertexRef.current !== null) {
+    if (draggingId !== null || draggingVertexRef.current !== null || draggingWaypointRef.current !== null) {
       store.saveHistory();
       setDraggingId(null);
       setDraggingVertex(null);
       draggingVertexRef.current = null;
+      draggingWaypointRef.current = null;
       setTimeout(() => { isDragging.current = false; }, 0);
     }
   };
@@ -216,6 +227,7 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
     if (mode !== 'edit') return;
     const { x, y } = getSVGCoords(e);
     const HIT = (settings.polygonVertexRadius + 8);
+    // 1. Polygon vertices
     for (let pi = 0; pi < polygons.length; pi++) {
       const poly = polygons[pi];
       for (let vi = 0; vi < poly.points.length; vi++) {
@@ -225,6 +237,24 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
           dragOrigin.current = { x, y };
           draggingVertexRef.current = { polyIdx: pi, vtxIdx: vi };
           setDraggingVertex({ polyIdx: pi, vtxIdx: vi });
+          return;
+        }
+      }
+    }
+    // 2. Edge waypoints — Shift+click removes, plain click starts drag
+    const WP_HIT = 9;
+    for (const conn of connections) {
+      const wps = conn.waypoints ?? [];
+      for (let wi = 0; wi < wps.length; wi++) {
+        const w = wps[wi];
+        if (Math.hypot(x - w.x, y - w.y) <= WP_HIT) {
+          if (e.shiftKey) {
+            removeWaypoint(conn.from_id, conn.to_id, wi);
+            return;
+          }
+          isDragging.current = false;
+          dragOrigin.current = { x, y };
+          draggingWaypointRef.current = { fromId: conn.from_id, toId: conn.to_id, index: wi };
           return;
         }
       }
@@ -277,9 +307,39 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
 
   // ---- Connection handlers ----
 
-  const handleConnectionClick = (e: React.MouseEvent, from_id: string, to_id: string) => {
+  // Squared distance from point P to segment AB.
+  const distSqToSegment = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return (p.x - a.x) ** 2 + (p.y - a.y) ** 2;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + t * dx, py = a.y + t * dy;
+    return (p.x - px) ** 2 + (p.y - py) ** 2;
+  };
+
+  const handleConnectionClick = (
+    e: React.MouseEvent,
+    from_id: string,
+    to_id: string,
+    allPts?: { x: number; y: number }[],
+  ) => {
     e.stopPropagation();
-    if (mode === 'delete') removeConnection(from_id, to_id);
+    if (mode === 'delete') {
+      removeConnection(from_id, to_id);
+      return;
+    }
+    if (mode === 'edit' && allPts && allPts.length >= 2) {
+      // Find which segment of the polyline was clicked; insert a waypoint at that position.
+      const { x, y } = getSVGCoords(e);
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < allPts.length - 1; i++) {
+        const d = distSqToSegment({ x, y }, allPts[i], allPts[i + 1]);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      addWaypoint(from_id, to_id, bestIdx, { x, y });
+    }
   };
 
   // ---- Polygon handlers ----
@@ -393,23 +453,49 @@ export const SVGCanvas: React.FC<SVGCanvasProps> = ({ routeOverlay, onNodeEdit }
         const to   = points.find(p => p.id === conn.to_id);
         if (!from || !to) return null;
         const deletable = mode === 'delete';
+        const editable  = mode === 'edit';
+        const wps = conn.waypoints ?? [];
+        const allPts = [{ x: from.x, y: from.y }, ...wps, { x: to.x, y: to.y }];
+        const polyStr = allPts.map(p => `${p.x},${p.y}`).join(' ');
         return (
           <g key={`conn-${conn.from_id}-${conn.to_id}`}>
-            {deletable && (
-              <line
-                x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+            {/* Wide invisible hit area: catches clicks in delete (remove edge) and edit (add waypoint) */}
+            {(deletable || editable) && (
+              <polyline
+                points={polyStr}
+                fill="none"
                 stroke="transparent"
                 strokeWidth={Math.max(settings.lineWidth, 12)}
-                cursor="pointer"
-                onClick={(e) => handleConnectionClick(e, conn.from_id, conn.to_id)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                cursor={deletable ? 'pointer' : 'crosshair'}
+                onClick={(e) => handleConnectionClick(e, conn.from_id, conn.to_id, allPts)}
               />
             )}
-            <line
-              x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+            <polyline
+              points={polyStr}
+              fill="none"
               stroke={deletable ? CANVAS_COLORS.DELETE : settings.lineColor}
               strokeWidth={settings.lineWidth}
+              strokeLinejoin="round"
               pointerEvents="none"
             />
+            {/* Waypoint handles in edit mode */}
+            {editable && wps.map((w, wi) => {
+              const isDragging = draggingWaypointRef.current?.fromId === conn.from_id
+                              && draggingWaypointRef.current?.toId   === conn.to_id
+                              && draggingWaypointRef.current?.index  === wi;
+              return (
+                <circle
+                  key={`wp-${conn.from_id}-${conn.to_id}-${wi}`}
+                  cx={w.x} cy={w.y} r={5}
+                  fill="#fff"
+                  stroke={settings.lineColor}
+                  strokeWidth={1.5}
+                  cursor={isDragging ? 'grabbing' : 'grab'}
+                />
+              );
+            })}
           </g>
         );
       })}

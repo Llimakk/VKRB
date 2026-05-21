@@ -86,6 +86,7 @@ def _build_graph_out(plan: Plan, db: Session) -> PlanGraphOut:
                 to_node_id=e.to_node_id,
                 distance=e.distance,
                 weight=e.weight,
+                waypoints=e.waypoints,
             )
             for e in edges
         ],
@@ -353,13 +354,20 @@ def save_plan_graph(plan_id: int, payload: PlanGraphIn, db: Session = Depends(ge
 
         x1, y1 = node_coords[pair[0]]
         x2, y2 = node_coords[pair[1]]
-        dist = _pixel_distance(x1, y1, x2, y2, plan.resolution)
+        wps = edge_in.waypoints or []
+        # Compute length through waypoints (sum of consecutive segments).
+        path = [(x1, y1), *((float(w["x"]), float(w["y"])) for w in wps), (x2, y2)]
+        dist = sum(
+            _pixel_distance(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1], plan.resolution)
+            for i in range(len(path) - 1)
+        )
 
         db.add(NavEdge(
             from_node_id=pair[0],
             to_node_id=pair[1],
             distance=dist,
             weight=edge_in.weight,
+            waypoints=wps if wps else None,
         ))
 
     # 5. Update polygon geometry and entry points for listed objects
