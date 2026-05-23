@@ -88,9 +88,7 @@
               <p id="planHint" class="muted">Изображение не загружено.</p>
               <div id="planFloorTools" class="plan-floor-tools" hidden>
                 <div class="plan-marker-legend-row">
-                  <p id="planMarkerLegend" class="muted plan-marker-legend">
-                    коридор — фиолетовый, лестница — оранжевый, лифт — зелёный, помещение — голубой
-                  </p>
+                  <ul id="planMarkerLegend" class="plan-marker-legend muted"></ul>
                   <button
                     type="button"
                     id="planMarkerLegendToggle"
@@ -139,13 +137,85 @@
             </div>
           </section>
 
+          <div id="globalSearchSection" class="global-search-section" hidden>
+            <div class="global-search-wrap">
+              <div class="global-search" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <div class="global-search__bar">
+                  <button
+                    type="button"
+                    id="globalSearchFilterBtn"
+                    class="btn btn--outline global-search__btn global-search__btn--icon"
+                    aria-expanded="false"
+                    aria-controls="globalSearchFilterPanel"
+                    aria-label="Фильтр"
+                    title="Фильтр"
+                  >
+                    <svg class="global-search__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path
+                        fill="currentColor"
+                        d="M4 5h16l-6.2 7.4V19l-3.6-1.8v-8.8L4 5z"
+                      />
+                    </svg>
+                  </button>
+                  <input
+                    id="globalSearchInput"
+                    class="global-search__input"
+                    type="search"
+                    placeholder="Поиск по имени…"
+                    autocomplete="off"
+                    aria-autocomplete="list"
+                    aria-controls="globalSearchResults"
+                  />
+                  <button
+                    type="button"
+                    id="globalSearchBtn"
+                    class="btn btn--primary global-search__btn global-search__btn--icon"
+                    aria-label="Поиск"
+                    title="Поиск"
+                  >
+                    <svg class="global-search__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path
+                        fill="currentColor"
+                        d="M10.5 4a6.5 6.5 0 0 1 5.25 10.32l4.38 4.38-1.42 1.42-4.38-4.38A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <ul
+                  id="globalSearchResults"
+                  class="global-search__dropdown"
+                  role="listbox"
+                  hidden
+                ></ul>
+              </div>
+              <div
+                id="globalSearchFilterPanel"
+                class="global-search-filter"
+                hidden
+                role="region"
+                aria-label="Фильтр поиска по видам"
+              >
+                <div class="global-search-filter__columns">
+                  <div class="global-search-filter__col">
+                    <h4 class="global-search-filter__title">Иерархия</h4>
+                    <div id="globalSearchFilterHier" class="global-search-filter__list"></div>
+                  </div>
+                  <div class="global-search-filter__col">
+                    <h4 class="global-search-filter__title">Зоны перехода</h4>
+                    <div id="globalSearchFilterTz" class="global-search-filter__list"></div>
+                  </div>
+                  <div class="global-search-filter__col">
+                    <h4 class="global-search-filter__title">Помещения</h4>
+                    <div id="globalSearchFilterRoom" class="global-search-filter__list"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="dictCardsRow" class="dict-cards-row" hidden>
           <section id="objectTypesCard" class="card dict-page-card" hidden>
             <h3>Типы объектов</h3>
-            <form id="objectTypeForm" class="create-form">
-              <input id="objectTypeNameInput" type="text" autocomplete="off" placeholder="Новый тип объекта" required />
-              <button type="submit" class="btn btn--primary">Добавить тип</button>
-            </form>
             <table>
               <thead>
                 <tr>
@@ -287,6 +357,14 @@
             <label for="entityMetaParentId">Код (id) родителя</label>
             <input id="entityMetaParentId" type="text" readonly />
           </div>
+          <div id="entityMetaParentTypeWrap" hidden>
+            <label for="entityMetaParentTypeId">Код родительского типа</label>
+            <input id="entityMetaParentTypeId" type="text" readonly />
+          </div>
+          <div id="entityMetaKindTypeWrap" hidden>
+            <label for="entityMetaObjectTypeId">Код типа</label>
+            <input id="entityMetaObjectTypeId" type="text" readonly />
+          </div>
           <div id="entityMetaTypeWrap" hidden>
             <label for="entityMetaReadType">Тип</label>
             <input id="entityMetaReadType" type="text" readonly />
@@ -298,6 +376,10 @@
           <div id="entityMetaKindEditWrap" hidden>
             <label for="entityMetaKindSelect">Вид</label>
             <select id="entityMetaKindSelect" required></select>
+          </div>
+          <div id="entityMetaMarkerColorWrap" hidden>
+            <label for="entityMetaMarkerColor">Цвет на плане</label>
+            <input id="entityMetaMarkerColor" type="color" value="#607d8b" />
           </div>
           <div>
             <label for="entityMetaShortName">Краткое имя</label>

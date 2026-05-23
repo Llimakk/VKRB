@@ -117,11 +117,21 @@ class ObjectType(Base):
     __tablename__ = "object_type"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    parent_object_type_id: Mapped[int | None] = mapped_column(
+        ForeignKey("object_type.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marker_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
+    parent_type: Mapped["ObjectType | None"] = relationship(
+        "ObjectType",
+        remote_side="ObjectType.id",
+        foreign_keys=[parent_object_type_id],
+    )
     object_kinds: Mapped[list["ObjectKind"]] = relationship(back_populates="object_type", cascade="all, delete-orphan")
     objects: Mapped[list["Object"]] = relationship(back_populates="object_type", cascade="all, delete-orphan")
     transition_zones: Mapped[list["TransitionZone"]] = relationship(back_populates="object_type")
@@ -136,6 +146,7 @@ class ObjectKind(Base):
     number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marker_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     object_type: Mapped["ObjectType"] = relationship(back_populates="object_kinds")
     objects: Mapped[list["Object"]] = relationship(back_populates="object_kind")

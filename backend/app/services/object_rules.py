@@ -2,17 +2,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import ObjectKind, ObjectType, TransitionZone
+from app.services.object_type_hierarchy import classify_object_type
 
 
 def is_transition_zone_type_name(type_name: str) -> bool:
-    n = (type_name or "").strip().lower()
-    return (
-        n in {"зона перехода", "transition_zone", "transition zone"}
-        or "коридор" in n
-        or "лестниц" in n
-        or "лифт" in n
-        or "переход" in n
-    )
+    return classify_object_type(type_name) == "transition_zone"
 
 
 def is_corridor_kind_name(kind_name: str) -> bool:

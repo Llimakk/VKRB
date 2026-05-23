@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -111,16 +111,20 @@ class FloorOut(BaseModel):
 class ObjectTypeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    parent_object_type_id: Optional[int] = None
     name: str
     number: Optional[int] = None
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectTypeCreate(BaseModel):
     name: str
+    parent_object_type_id: Optional[int] = None
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectTypeUpdate(BaseModel):
@@ -128,6 +132,7 @@ class ObjectTypeUpdate(BaseModel):
     number: Optional[int] = None
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectKindOut(BaseModel):
@@ -138,6 +143,7 @@ class ObjectKindOut(BaseModel):
     number: Optional[int] = None
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectKindCreate(BaseModel):
@@ -145,6 +151,7 @@ class ObjectKindCreate(BaseModel):
     name: str
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectKindUpdate(BaseModel):
@@ -153,6 +160,7 @@ class ObjectKindUpdate(BaseModel):
     number: Optional[int] = None
     full_name: Optional[str] = None
     description: Optional[str] = None
+    marker_color: Optional[str] = None
 
 
 class ObjectCreate(BaseModel):
@@ -228,3 +236,26 @@ class TransitionZoneOut(BaseModel):
     pos_x: Optional[float] = None
     pos_y: Optional[float] = None
     drawing_url: Optional[str] = None
+
+
+SearchEntityType = Literal[
+    "campus",
+    "building",
+    "structure",
+    "floor",
+    "plan_object",
+    "transition_zone",
+]
+
+
+class SearchHitOut(BaseModel):
+    entity_type: SearchEntityType
+    entity_id: int
+    name: str
+    kind_label: str
+    campus_id: int
+    building_id: Optional[int] = None
+    structure_id: Optional[int] = None
+    floor_id: Optional[int] = None
+    transition_zone_id: Optional[int] = None
+    path_label: Optional[str] = None

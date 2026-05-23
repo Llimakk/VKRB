@@ -228,6 +228,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
                 "number": o.object_type.number,
                 "full_name": o.object_type.full_name,
                 "description": o.object_type.description,
+                "marker_color": o.object_type.marker_color,
             },
             "object_kind": {
                 "id": o.object_kind.id,
@@ -236,6 +237,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
                 "number": o.object_kind.number,
                 "full_name": o.object_kind.full_name,
                 "description": o.object_kind.description,
+                "marker_color": o.object_kind.marker_color,
             },
             "pos_x": o.pos_x,
             "pos_y": o.pos_y,
@@ -261,6 +263,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
                 "number": z.object_type.number,
                 "full_name": z.object_type.full_name,
                 "description": z.object_type.description,
+                "marker_color": z.object_type.marker_color,
             },
             "object_kind": {
                 "id": z.object_kind.id,
@@ -269,6 +272,7 @@ def get_floor_context(floor_id: int, db: Session = Depends(get_db)):
                 "number": z.object_kind.number,
                 "full_name": z.object_kind.full_name,
                 "description": z.object_kind.description,
+                "marker_color": z.object_kind.marker_color,
             },
             "pos_x": z.pos_x,
             "pos_y": z.pos_y,

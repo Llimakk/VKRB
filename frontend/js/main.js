@@ -282,6 +282,364 @@ async function navigateToHome() {
   syncEntityEditCard();
 }
 
+let globalSearchAbortController = null;
+let globalSearchHits = [];
+let globalSearchActiveIndex = -1;
+let globalSearchFilterOpen = false;
+
+const GLOBAL_SEARCH_HIER_OPTIONS = [
+  { type: "campus", label: "Кампус" },
+  { type: "building", label: "Корпус" },
+  { type: "structure", label: "Строение" },
+  { type: "floor", label: "Этаж" },
+];
+
+/** @type {{ hier: Record<string, boolean>, kindById: Record<number, boolean> }} */
+const globalSearchFilter = {
+  hier: { campus: true, building: true, structure: true, floor: true },
+  kindById: {},
+};
+
+function hideGlobalSearchDropdown() {
+  if (!dom.globalSearchResults) return;
+  dom.globalSearchResults.hidden = true;
+  dom.globalSearchResults.innerHTML = "";
+  globalSearchHits = [];
+  globalSearchActiveIndex = -1;
+  const wrap = dom.globalSearchInput?.closest(".global-search");
+  if (wrap) wrap.setAttribute("aria-expanded", "false");
+}
+
+function renderGlobalSearchDropdown() {
+  if (!dom.globalSearchResults) return;
+  dom.globalSearchResults.innerHTML = "";
+  if (!globalSearchHits.length) {
+    hideGlobalSearchDropdown();
+    return;
+  }
+  for (let i = 0; i < globalSearchHits.length; i++) {
+    const hit = globalSearchHits[i];
+    const li = document.createElement("li");
+    li.className = "global-search__item";
+    li.setAttribute("role", "option");
+    li.dataset.index = String(i);
+    if (i === globalSearchActiveIndex) li.classList.add("global-search__item--active");
+
+    const main = document.createElement("div");
+    main.className = "global-search__item-main";
+    const nameEl = document.createElement("span");
+    nameEl.className = "global-search__item-name";
+    nameEl.textContent = hit.name;
+    main.appendChild(nameEl);
+    if (hit.path_label) {
+      const pathEl = document.createElement("span");
+      pathEl.className = "global-search__item-path";
+      pathEl.textContent = hit.path_label;
+      main.appendChild(pathEl);
+    }
+
+    const kindEl = document.createElement("span");
+    kindEl.className = "global-search__item-kind";
+    kindEl.textContent = hit.kind_label || "—";
+
+    li.append(main, kindEl);
+    li.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      void run(() => selectGlobalSearchHit(i));
+    });
+    dom.globalSearchResults.appendChild(li);
+  }
+  dom.globalSearchResults.hidden = false;
+  const wrap = dom.globalSearchInput?.closest(".global-search");
+  if (wrap) wrap.setAttribute("aria-expanded", "true");
+}
+
+function highlightGlobalSearchItem(index) {
+  globalSearchActiveIndex = index;
+  if (!dom.globalSearchResults) return;
+  const items = dom.globalSearchResults.querySelectorAll(".global-search__item");
+  items.forEach((el, i) => {
+    el.classList.toggle("global-search__item--active", i === index);
+  });
+  const active = items[index];
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+async function selectGlobalSearchHit(index) {
+  const hit = globalSearchHits[index];
+  if (!hit) return;
+  if (dom.globalSearchInput) dom.globalSearchInput.value = "";
+  hideGlobalSearchDropdown();
+  await navigateToSearchResult(hit);
+}
+
+async function navigateToSearchResult(hit) {
+  if (!hit?.campus_id) return;
+
+  if (!state.campuses.length) {
+    state.campuses = await api.getCampuses();
+    fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
+  }
+
+  state.selected.campusId = hit.campus_id;
+  state.selected.buildingId = hit.building_id ?? null;
+  state.selected.structureId = hit.structure_id ?? null;
+  state.selected.floorId = hit.floor_id ?? null;
+
+  state.buildings = await api.getBuildings(hit.campus_id);
+  fillSelect(
+    dom.buildingSelect,
+    state.buildings,
+    SELECT_BUILDING_PLACEHOLDER,
+    false,
+    hit.building_id,
+  );
+
+  if (hit.building_id) {
+    state.structures = await api.getStructures(hit.building_id);
+    fillSelect(
+      dom.structureSelect,
+      state.structures,
+      SELECT_STRUCTURE_PLACEHOLDER,
+      false,
+      hit.structure_id,
+    );
+  } else {
+    state.structures = [];
+    fillSelect(dom.structureSelect, [], SELECT_STRUCTURE_PLACEHOLDER, true);
+  }
+
+  if (hit.structure_id) {
+    state.floors = await api.getFloors(hit.structure_id);
+    fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER, false, hit.floor_id);
+  } else {
+    state.floors = [];
+    fillSelect(dom.floorSelect, [], SELECT_FLOOR_PLACEHOLDER, true);
+  }
+
+  dom.campusSelect.value = String(hit.campus_id);
+  syncSelectsFromState();
+
+  const entityType = hit.entity_type;
+  if (entityType === "campus") {
+    clearPlanView();
+    dom.pageTitle.textContent = getSelectedName(state.campuses, hit.campus_id);
+    setMode("campus");
+    loadEntityImage("campus", hit.entity_id);
+  } else if (entityType === "building") {
+    clearPlanView();
+    dom.pageTitle.textContent = getSelectedName(state.buildings, hit.entity_id);
+    setMode("building");
+    loadEntityImage("building", hit.entity_id);
+  } else if (entityType === "structure") {
+    clearPlanView();
+    dom.pageTitle.textContent = getSelectedName(state.structures, hit.entity_id);
+    setMode("structure");
+    loadEntityImage("structure", hit.entity_id);
+  } else if (entityType === "floor") {
+    dom.pageTitle.textContent = getSelectedName(state.floors, hit.entity_id);
+    setMode("floor");
+    await refreshFloorTransitionZoneKinds();
+    await loadFloorContext(hit.entity_id);
+  } else if (entityType === "transition_zone") {
+    dom.pageTitle.textContent = getSelectedName(state.floors, hit.floor_id);
+    setMode("floor");
+    await refreshFloorTransitionZoneKinds();
+    await loadFloorContext(hit.floor_id);
+    focusTransitionZoneInList(hit.entity_id);
+  } else if (entityType === "plan_object") {
+    dom.pageTitle.textContent = getSelectedName(state.floors, hit.floor_id);
+    setMode("floor");
+    await refreshFloorTransitionZoneKinds();
+    await loadFloorContext(hit.floor_id);
+    if (hit.transition_zone_id) {
+      focusRoomInCorridor(hit.transition_zone_id, hit.entity_id);
+    } else {
+      state.focusedObjectId = hit.entity_id;
+      state.focusedTransitionZoneId = null;
+      renderObjects();
+      renderPlanMarkers();
+    }
+  }
+
+  renderPath();
+  syncDeleteBranchButton();
+  syncEntityEditCard();
+}
+
+function ensureGlobalSearchFilterDefaults() {
+  for (const { type } of GLOBAL_SEARCH_HIER_OPTIONS) {
+    if (globalSearchFilter.hier[type] === undefined) globalSearchFilter.hier[type] = true;
+  }
+  for (const k of transitionZoneKinds()) {
+    if (globalSearchFilter.kindById[k.id] === undefined) globalSearchFilter.kindById[k.id] = true;
+  }
+  for (const k of roomKinds()) {
+    if (globalSearchFilter.kindById[k.id] === undefined) globalSearchFilter.kindById[k.id] = true;
+  }
+}
+
+function appendGlobalSearchFilterCheckbox(container, label, checked, onChange) {
+  const lab = document.createElement("label");
+  lab.className = "global-search-filter__label";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.addEventListener("change", () => onChange(input.checked));
+  lab.append(input, document.createTextNode(label));
+  container.appendChild(lab);
+}
+
+function renderGlobalSearchFilterPanel() {
+  ensureGlobalSearchFilterDefaults();
+
+  if (dom.globalSearchFilterHier) {
+    dom.globalSearchFilterHier.innerHTML = "";
+    for (const { type, label } of GLOBAL_SEARCH_HIER_OPTIONS) {
+      appendGlobalSearchFilterCheckbox(
+        dom.globalSearchFilterHier,
+        label,
+        !!globalSearchFilter.hier[type],
+        (on) => {
+          globalSearchFilter.hier[type] = on;
+        },
+      );
+    }
+  }
+
+  const renderKindColumn = (container, kinds, emptyText) => {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!kinds.length) {
+      const p = document.createElement("p");
+      p.className = "global-search-filter__empty";
+      p.textContent = emptyText;
+      container.appendChild(p);
+      return;
+    }
+    for (const k of kinds) {
+      appendGlobalSearchFilterCheckbox(
+        container,
+        k.name,
+        !!globalSearchFilter.kindById[k.id],
+        (on) => {
+          globalSearchFilter.kindById[k.id] = on;
+        },
+      );
+    }
+  };
+
+  renderKindColumn(dom.globalSearchFilterTz, transitionZoneKinds(), "Нет видов зон перехода");
+  renderKindColumn(dom.globalSearchFilterRoom, roomKinds(), "Нет видов помещений");
+}
+
+function collectGlobalSearchFilterParams() {
+  ensureGlobalSearchFilterDefaults();
+  const hierTypes = GLOBAL_SEARCH_HIER_OPTIONS.filter(({ type }) => globalSearchFilter.hier[type]).map(
+    ({ type }) => type,
+  );
+  const tzKindIds = transitionZoneKinds()
+    .filter((k) => globalSearchFilter.kindById[k.id])
+    .map((k) => k.id);
+  const roomKindIds = roomKinds()
+    .filter((k) => globalSearchFilter.kindById[k.id])
+    .map((k) => k.id);
+  return { hierTypes, tzKindIds, roomKindIds };
+}
+
+function isGlobalSearchDropdownVisible() {
+  return dom.globalSearchResults && !dom.globalSearchResults.hidden && globalSearchHits.length > 0;
+}
+
+function toggleGlobalSearchFilterPanel() {
+  if (!dom.globalSearchFilterPanel) return;
+  globalSearchFilterOpen = !globalSearchFilterOpen;
+  dom.globalSearchFilterPanel.hidden = !globalSearchFilterOpen;
+  if (dom.globalSearchFilterBtn) {
+    dom.globalSearchFilterBtn.setAttribute("aria-expanded", globalSearchFilterOpen ? "true" : "false");
+  }
+  if (globalSearchFilterOpen) renderGlobalSearchFilterPanel();
+}
+
+function hideGlobalSearchFilterPanel() {
+  globalSearchFilterOpen = false;
+  if (dom.globalSearchFilterPanel) dom.globalSearchFilterPanel.hidden = true;
+  if (dom.globalSearchFilterBtn) dom.globalSearchFilterBtn.setAttribute("aria-expanded", "false");
+}
+
+async function runGlobalSearch() {
+  if (!dom.globalSearchInput) return;
+  const q = dom.globalSearchInput.value.trim();
+  if (!q) {
+    hideGlobalSearchDropdown();
+    return;
+  }
+  const { hierTypes, tzKindIds, roomKindIds } = collectGlobalSearchFilterParams();
+  if (!hierTypes.length && !tzKindIds.length && !roomKindIds.length) {
+    hideGlobalSearchDropdown();
+    return;
+  }
+  if (globalSearchAbortController) globalSearchAbortController.abort();
+  globalSearchAbortController = new AbortController();
+  const signal = globalSearchAbortController.signal;
+  try {
+    globalSearchHits =
+      (await api.searchObjects(q, { limit: 25, hierTypes, tzKindIds, roomKindIds }, signal)) || [];
+    globalSearchActiveIndex = globalSearchHits.length ? 0 : -1;
+    renderGlobalSearchDropdown();
+  } catch (e) {
+    if (e?.name === "AbortError") return;
+    throw e;
+  }
+}
+
+function initGlobalSearch() {
+  if (!dom.globalSearchInput || !dom.globalSearchResults) return;
+
+  renderGlobalSearchFilterPanel();
+
+  dom.globalSearchBtn?.addEventListener("click", () => void run(runGlobalSearch));
+  dom.globalSearchFilterBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleGlobalSearchFilterPanel();
+  });
+
+  dom.globalSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideGlobalSearchDropdown();
+      hideGlobalSearchFilterPanel();
+      return;
+    }
+    if (e.key === "Enter") {
+      if (isGlobalSearchDropdownVisible() && globalSearchActiveIndex >= 0) {
+        e.preventDefault();
+        void run(() => selectGlobalSearchHit(globalSearchActiveIndex));
+        return;
+      }
+      e.preventDefault();
+      void run(runGlobalSearch);
+      return;
+    }
+    if (!isGlobalSearchDropdownVisible() || !globalSearchHits.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.min(globalSearchActiveIndex + 1, globalSearchHits.length - 1);
+      highlightGlobalSearchItem(next);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = Math.max(globalSearchActiveIndex - 1, 0);
+      highlightGlobalSearchItem(prev);
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!dom.globalSearchSection?.contains(e.target)) {
+      hideGlobalSearchDropdown();
+      hideGlobalSearchFilterPanel();
+    }
+  });
+}
+
 function clearPlanView() {
   dom.planImage.removeAttribute("src");
   dom.planImage.style.display = "none";
@@ -453,10 +811,21 @@ function photoUrlForEntityEdit(level, row) {
   return u ? normalizeImageUrl(u) : "";
 }
 
+function syncGlobalSearchVisibility() {
+  if (!dom.globalSearchSection) return;
+  const show = state.uiMode === "none";
+  dom.globalSearchSection.hidden = !show;
+  if (!show) {
+    hideGlobalSearchDropdown();
+    hideGlobalSearchFilterPanel();
+  }
+}
+
 function syncContentGridLayout() {
   const grid = dom.contentGrid;
   if (!grid) return;
   grid.className = "content-grid";
+  syncGlobalSearchVisibility();
   if (state.uiMode === "none") {
     grid.classList.add("content-grid--dict");
     return;
@@ -533,6 +902,7 @@ function applyCreateFormsVisibility(mode) {
 
 function setMode(mode) {
   state.uiMode = mode;
+  syncGlobalSearchVisibility();
   if (mode === "none") {
     dom.photoCard.style.display = "none";
     if (dom.planFloorTools) dom.planFloorTools.hidden = true;
@@ -654,6 +1024,107 @@ function transitionZoneKinds() {
     .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
 }
 
+/** Палитра для новых видов зоны (синхронно с backend kind_marker_color.MARKER_COLOR_PALETTE). */
+const MARKER_COLOR_PALETTE = [
+  "#7b1fa2",
+  "#c2185b",
+  "#00838f",
+  "#6d4c41",
+  "#5d4037",
+  "#455a64",
+  "#ad1457",
+  "#6a1b9a",
+];
+
+const ROOM_MARKER_COLOR = "#64b5f6";
+const UNKNOWN_ZONE_MARKER_COLOR = "#9e9e9e";
+
+function legacyKindMarkerColorByName(name) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("коридор")) return "#5b21b6";
+  if (n.includes("лестниц")) return "#e65100";
+  if (n.includes("лифт")) return "#2e7d32";
+  return null;
+}
+
+/** Цвет маркера для видов зоны перехода (не для помещений). */
+function kindMarkerColor(kind) {
+  if (!kind) return UNKNOWN_ZONE_MARKER_COLOR;
+  if (kind.marker_color) return kind.marker_color;
+  const legacy = legacyKindMarkerColorByName(kind.name);
+  if (legacy) return legacy;
+  return UNKNOWN_ZONE_MARKER_COLOR;
+}
+
+function findRoomObjectType() {
+  return state.objectTypes.find((t) => isRoomObjectTypeName(t.name)) || null;
+}
+
+/** Единый цвет всех помещений на плане — с типа «Помещение». */
+function roomMarkerColor(objectType) {
+  let t = objectType || findRoomObjectType();
+  if (t?.id) {
+    const fromState = state.objectTypes.find((row) => Number(row.id) === Number(t.id));
+    if (fromState) t = fromState;
+  } else {
+    t = findRoomObjectType();
+  }
+  if (t?.marker_color) return t.marker_color;
+  return ROOM_MARKER_COLOR;
+}
+
+function objectTypeIdSupportsKindMarkerColor(objectTypeId) {
+  const t = state.objectTypes.find((row) => Number(row.id) === Number(objectTypeId));
+  if (!t) return false;
+  return isTransitionZoneTypeName(t.name);
+}
+
+/** Справочник видов: можно добавлять для зон перехода и помещений. */
+function objectTypeIdAllowsDictionaryKindManage(objectTypeId) {
+  const t = state.objectTypes.find((row) => Number(row.id) === Number(objectTypeId));
+  if (!t) return false;
+  return isTransitionZoneTypeName(t.name) || isRoomObjectTypeName(t.name);
+}
+
+function predictDefaultMarkerColor(objectTypeId) {
+  const typeId = Number(objectTypeId);
+  const parentType = state.objectTypes.find((t) => Number(t.id) === typeId);
+  if (!parentType) return UNKNOWN_ZONE_MARKER_COLOR;
+  if (!isTransitionZoneTypeName(parentType.name)) return UNKNOWN_ZONE_MARKER_COLOR;
+  const used = new Set(
+    state.objectKinds
+      .filter((k) => Number(k.object_type_id) === typeId && k.marker_color)
+      .map((k) => String(k.marker_color).toLowerCase()),
+  );
+  for (const color of MARKER_COLOR_PALETTE) {
+    if (!used.has(color.toLowerCase())) return color;
+  }
+  return UNKNOWN_ZONE_MARKER_COLOR;
+}
+
+function renderPlanMarkerLegend() {
+  if (!dom.planMarkerLegend) return;
+  dom.planMarkerLegend.innerHTML = "";
+  for (const k of transitionZoneKinds()) {
+    const li = document.createElement("li");
+    const swatch = document.createElement("span");
+    swatch.className = "plan-marker-legend-swatch";
+    swatch.setAttribute("aria-hidden", "true");
+    swatch.style.backgroundColor = kindMarkerColor(k);
+    li.appendChild(swatch);
+    li.appendChild(document.createTextNode(k.name || "—"));
+    dom.planMarkerLegend.appendChild(li);
+  }
+  const roomLi = document.createElement("li");
+  const roomSwatch = document.createElement("span");
+  roomSwatch.className = "plan-marker-legend-swatch";
+  roomSwatch.setAttribute("aria-hidden", "true");
+  roomSwatch.style.backgroundColor = roomMarkerColor();
+  roomLi.appendChild(roomSwatch);
+  roomLi.appendChild(document.createTextNode("помещение"));
+  dom.planMarkerLegend.appendChild(roomLi);
+}
+
 function objectTypeNameById(id) {
   return state.objectTypes.find((t) => t.id === id)?.name || "—";
 }
@@ -672,6 +1143,10 @@ function isHierarchyObjectTypeName(name) {
   );
 }
 
+function isHierarchyObjectKindTypeId(objectTypeId) {
+  return isHierarchyObjectTypeName(objectTypeNameById(objectTypeId));
+}
+
 /** Типы справочника «Помещение» (не зона перехода, не иерархия). */
 function isRoomObjectTypeName(name) {
   const n = (name || "").toLowerCase().trim();
@@ -687,6 +1162,18 @@ function roomObjectTypeIds() {
       .filter((t) => !isTransitionZoneTypeName(t.name) && !isHierarchyObjectTypeName(t.name))
       .map((t) => t.id),
   );
+}
+
+/** Типы, для которых в справочнике можно добавлять/удалять виды (зона перехода, помещение). */
+function dictionaryKindTypeOptions() {
+  return state.objectTypes.filter(
+    (t) => isTransitionZoneTypeName(t.name) || isRoomObjectTypeName(t.name),
+  );
+}
+
+function canDeleteObjectKind(kind) {
+  const typeName = objectTypeNameById(kind.object_type_id);
+  return isTransitionZoneTypeName(typeName) || isRoomObjectTypeName(typeName);
 }
 
 function roomKinds() {
@@ -813,9 +1300,9 @@ function renderObjects() {
 }
 
 function buildZoneSection(zone) {
-  const accentKey = getZoneAccentKey(zone);
   const section = document.createElement("article");
-  section.className = `zone-section zone-section--${accentKey}`;
+  section.className = "zone-section zone-section--custom";
+  section.style.setProperty("--zone-mark", kindMarkerColor(zone.object_kind));
   section.dataset.transitionZoneId = String(zone.id);
   if (state.focusedTransitionZoneId === zone.id) {
     section.classList.add("is-focused");
@@ -1176,23 +1663,6 @@ function buildCorridorRoomsPanel(corridor) {
   return panel;
 }
 
-/** Цвет маркера по русскому названию типа (без полей в БД). */
-function markerClassByTypeName(obj) {
-  const n = (obj.object_kind?.name || obj.object_type?.name || "").toLowerCase();
-  if (n.includes("коридор")) return "plan-marker--corridor";
-  if (n.includes("лестниц")) return "plan-marker--stair";
-  if (n.includes("лифт")) return "plan-marker--lift";
-  return "plan-marker--room";
-}
-
-function getZoneAccentKey(obj) {
-  const n = (obj.object_kind?.name || obj.object_type?.name || "").toLowerCase();
-  if (n.includes("коридор")) return "corridor";
-  if (n.includes("лестниц")) return "stair";
-  if (n.includes("лифт")) return "lift";
-  return "default";
-}
-
 function isPlanLegendHidden() {
   return localStorage.getItem(PLAN_LEGEND_HIDDEN_STORAGE_KEY) === "1";
 }
@@ -1270,11 +1740,12 @@ function getObjectFitContainMetrics(img) {
   return { elW, elH, offX, offY, dispW, dispH };
 }
 
-function appendPlanMarker(container, imgEl, m, item, className, title, onClick) {
+function appendPlanMarker(container, imgEl, m, item, className, title, onClick, markerColor) {
   if (item.pos_x == null || item.pos_y == null) return;
   const marker = document.createElement("button");
   marker.type = "button";
-  marker.className = `plan-marker ${className}`;
+  marker.className = `plan-marker ${className || ""}`.trim();
+  if (markerColor) marker.style.backgroundColor = markerColor;
   if (m) {
     const leftPct = ((m.offX + item.pos_x * m.dispW) / m.elW) * 100;
     const topPct = ((m.offY + item.pos_y * m.dispH) / m.elH) * 100;
@@ -1303,7 +1774,7 @@ function renderPlanMarkersIn(container, imgEl) {
       imgEl,
       m,
       obj,
-      markerClassByTypeName(obj),
+      "",
       `${obj.object_type.name}: ${obj.name}`,
       (e) => {
         e.stopPropagation();
@@ -1314,6 +1785,7 @@ function renderPlanMarkersIn(container, imgEl) {
         if (state.placement.objectId != null) return;
         focusTransitionZoneInList(obj.id);
       },
+      kindMarkerColor(obj.object_kind),
     );
   }
 
@@ -1325,7 +1797,7 @@ function renderPlanMarkersIn(container, imgEl) {
       imgEl,
       m,
       room,
-      "plan-marker--room",
+      "",
       `${kindName}: ${room.name}`,
       (e) => {
         e.stopPropagation();
@@ -1336,6 +1808,7 @@ function renderPlanMarkersIn(container, imgEl) {
         if (state.placement.transitionZoneId != null) return;
         focusRoomInCorridor(room.transition_zone_id, room.id);
       },
+      roomMarkerColor(room.object_type),
     );
   }
 }
@@ -1511,14 +1984,12 @@ function openEntityMetaDialog(ctx) {
   pendingMetaContext = ctx;
   dom.entityMetaTitle.textContent = ctx.title || "Дополнительные поля";
   if (dom.entityMetaParentWrap) dom.entityMetaParentWrap.hidden = true;
-  const isDictNew = ctx.kind === "object_type_new" || ctx.kind === "object_kind_new";
-  if (ctx.kind === "object_type_new") {
-    if (dom.entityMetaNumberLabel) dom.entityMetaNumberLabel.textContent = "Номер";
-    const n = predictedNextObjectTypeId();
-    dom.entityMetaNumber.value = String(n);
-    dom.entityMetaNumber.title =
-      "Номер совпадает с id записи; до сохранения показано ожидаемое следующее значение.";
-  } else if (ctx.kind === "object_kind_new") {
+  if (dom.entityMetaParentTypeWrap) dom.entityMetaParentTypeWrap.hidden = true;
+  if (dom.entityMetaKindTypeWrap) dom.entityMetaKindTypeWrap.hidden = true;
+  const isDictNew = ctx.kind === "object_kind_new";
+  const isObjectTypeEdit = ctx.kind === "object_type";
+  const isObjectKindEdit = ctx.kind === "object_kind";
+  if (ctx.kind === "object_kind_new") {
     const n = predictedNextObjectKindId();
     dom.entityMetaNumber.value = String(n);
     dom.entityMetaNumber.title =
@@ -1552,6 +2023,26 @@ function openEntityMetaDialog(ctx) {
       dom.entityMetaParentId.value = showParent ? String(ctx.parentId) : "";
     }
   }
+  if (dom.entityMetaParentTypeWrap) {
+    dom.entityMetaParentTypeWrap.hidden = !isObjectTypeEdit;
+    if (dom.entityMetaParentTypeId) {
+      const parentTypeId = ctx.parentObjectTypeId;
+      dom.entityMetaParentTypeId.value =
+        parentTypeId != null && parentTypeId !== "" ? String(parentTypeId) : "—";
+      dom.entityMetaParentTypeId.title =
+        parentTypeId != null && parentTypeId !== ""
+          ? "Только просмотр, изменить нельзя."
+          : "У корневого типа (кампус) родительский тип не задан.";
+    }
+  }
+  if (dom.entityMetaKindTypeWrap) {
+    dom.entityMetaKindTypeWrap.hidden = !isObjectKindEdit;
+    if (dom.entityMetaObjectTypeId) {
+      dom.entityMetaObjectTypeId.value =
+        ctx.objectTypeId != null && ctx.objectTypeId !== "" ? String(ctx.objectTypeId) : "—";
+      dom.entityMetaObjectTypeId.title = "Только просмотр, изменить нельзя.";
+    }
+  }
   const isTz = ctx.kind === "transition_zone";
   const isRoom = ctx.kind === "room";
   if (dom.entityMetaTypeWrap) {
@@ -1572,7 +2063,41 @@ function openEntityMetaDialog(ctx) {
       fillRoomKindSelect(dom.entityMetaKindSelect, ctx.objectKindId);
     }
   }
+  const showMarkerColorForKind =
+    (isObjectKindEdit || ctx.kind === "object_kind_new") &&
+    objectTypeIdSupportsKindMarkerColor(ctx.objectTypeId);
+  const showMarkerColorForType =
+    isObjectTypeEdit && isRoomObjectTypeName(ctx.shortName);
+  const showMarkerColor = showMarkerColorForKind || showMarkerColorForType;
+  if (dom.entityMetaMarkerColorWrap) {
+    dom.entityMetaMarkerColorWrap.hidden = !showMarkerColor;
+  }
+  if (showMarkerColor && dom.entityMetaMarkerColor) {
+    let color = ctx.markerColor;
+    if (showMarkerColorForType) {
+      color = ctx.markerColor || roomMarkerColor();
+    } else if (!color && isObjectKindEdit && ctx.id) {
+      const row = state.objectKinds.find((k) => Number(k.id) === Number(ctx.id));
+      color = kindMarkerColor(row);
+    } else if (!color && ctx.kind === "object_kind_new") {
+      color = predictDefaultMarkerColor(ctx.objectTypeId);
+    }
+    dom.entityMetaMarkerColor.value = color || UNKNOWN_ZONE_MARKER_COLOR;
+  }
   dom.entityMetaShortName.value = ctx.shortName || "";
+  const hierarchyKindShortNameLocked =
+    isObjectKindEdit && isHierarchyObjectKindTypeId(ctx.objectTypeId);
+  if (dom.entityMetaShortName) {
+    dom.entityMetaShortName.readOnly = isObjectTypeEdit || hierarchyKindShortNameLocked;
+    if (isObjectTypeEdit) {
+      dom.entityMetaShortName.title = "Имя типа зафиксировано в иерархии, изменить нельзя.";
+    } else if (hierarchyKindShortNameLocked) {
+      dom.entityMetaShortName.title =
+        "Краткое имя вида для кампуса, корпуса, строения и этажа зафиксировано, изменить нельзя.";
+    } else {
+      dom.entityMetaShortName.removeAttribute("title");
+    }
+  }
   setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
   dom.entityMetaFullName.value = ctx.fullName ?? "";
   dom.entityMetaDescription.value = ctx.description ?? "";
@@ -1580,19 +2105,23 @@ function openEntityMetaDialog(ctx) {
   const noLoc =
     ctx.kind === "object_type" ||
     ctx.kind === "object_kind" ||
-    ctx.kind === "object_type_new" ||
     ctx.kind === "object_kind_new" ||
     ctx.kind === "transition_zone" ||
     ctx.kind === "room";
   dom.entityMetaAddressWrap.hidden = noLoc;
   dom.entityMetaOverlay.hidden = false;
-  dom.entityMetaShortName.focus();
+  if (isObjectTypeEdit || hierarchyKindShortNameLocked) {
+    dom.entityMetaFullName?.focus();
+  } else {
+    dom.entityMetaShortName.focus();
+  }
 }
 
 function closeEntityMetaDialog() {
   dom.entityMetaOverlay.hidden = true;
   pendingMetaContext = null;
   dom.entityMetaForm.reset();
+  if (dom.entityMetaShortName) dom.entityMetaShortName.readOnly = false;
   setRoomDuplicateHint(dom.entityMetaRoomDuplicateHint, false);
 }
 
@@ -1686,10 +2215,6 @@ async function refreshListsAfterMetaCancel(ctx) {
   }
   if (ctx.isNewCreate && isHierarchyMetaKind(ctx.kind)) {
     await rollbackHierarchyCreateCancel(ctx);
-    return;
-  }
-  if (ctx.kind === "object_type_new") {
-    dom.objectTypeNameInput.value = ctx.shortName || "";
     return;
   }
   if (ctx.kind === "object_kind_new") {
@@ -1830,6 +2355,7 @@ async function loadFloorContext(floorId) {
 
   renderObjects();
   renderPlanMarkers();
+  renderPlanMarkerLegend();
   syncEntityEditCard();
 }
 
@@ -2039,6 +2565,8 @@ function renderObjectTypesDictionary() {
         kind: "object_type",
         id: t.id,
         number: t.number,
+        parentObjectTypeId: t.parent_object_type_id ?? null,
+        markerColor: t.marker_color ?? null,
         shortName: t.name,
         fullName: t.full_name ?? "",
         description: t.description ?? "",
@@ -2046,25 +2574,7 @@ function renderObjectTypesDictionary() {
       });
     };
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn--danger";
-    deleteBtn.textContent = "Удалить";
-    deleteBtn.onclick = () =>
-      void run(async () => {
-        const ok = await askConfirmation({
-          title: "Удаление типа",
-          message: `Удалить тип «${t.name}»?`,
-          okText: "Удалить",
-          cancelText: "Отмена",
-          destructive: true,
-        });
-        if (!ok) return;
-        await api.deleteObjectType(t.id);
-        await loadObjectDictionaries();
-      });
-
-    wrap.append(editBtn, deleteBtn);
+    wrap.append(editBtn);
     actionCell.appendChild(wrap);
     tr.append(nameCell, actionCell);
     dom.objectTypesTbody.appendChild(tr);
@@ -2094,6 +2604,7 @@ function renderObjectKindsDictionary() {
         id: k.id,
         objectTypeId: k.object_type_id,
         number: k.number,
+        markerColor: k.marker_color || kindMarkerColor(k),
         shortName: k.name,
         fullName: k.full_name ?? "",
         description: k.description ?? "",
@@ -2101,24 +2612,27 @@ function renderObjectKindsDictionary() {
       });
     };
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn--danger";
-    deleteBtn.textContent = "Удалить";
-    deleteBtn.onclick = () =>
-      void run(async () => {
-        const ok = await askConfirmation({
-          title: "Удаление вида",
-          message: `Удалить вид «${k.name}»?`,
-          okText: "Удалить",
-          cancelText: "Отмена",
-          destructive: true,
+    if (canDeleteObjectKind(k)) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn btn--danger";
+      deleteBtn.textContent = "Удалить";
+      deleteBtn.onclick = () =>
+        void run(async () => {
+          const ok = await askConfirmation({
+            title: "Удаление вида",
+            message: `Удалить вид «${k.name}»?`,
+            okText: "Удалить",
+            cancelText: "Отмена",
+            destructive: true,
+          });
+          if (!ok) return;
+          await api.deleteObjectKind(k.id);
+          await loadObjectDictionaries();
         });
-        if (!ok) return;
-        await api.deleteObjectKind(k.id);
-        await loadObjectDictionaries();
-      });
-    wrap.append(editBtn, deleteBtn);
+      wrap.append(deleteBtn);
+    }
+    wrap.prepend(editBtn);
     actionCell.appendChild(wrap);
     tr.append(typeCell, nameCell, actionCell);
     dom.objectKindsTbody.appendChild(tr);
@@ -2127,7 +2641,7 @@ function renderObjectKindsDictionary() {
 
 function syncKindSelects() {
   fillSelect(dom.kindSelect, transitionZoneKinds(), "Вид зоны перехода");
-  fillSelect(dom.objectKindTypeSelect, state.objectTypes, "Тип объекта");
+  fillSelect(dom.objectKindTypeSelect, dictionaryKindTypeOptions(), "Тип объекта");
   const tzType = findTransitionZoneCatalogType();
   if (tzType && dom.objectKindTypeSelect && state.uiMode === "none") {
     dom.objectKindTypeSelect.value = String(tzType.id);
@@ -2141,6 +2655,8 @@ async function loadObjectDictionaries() {
   syncKindSelects();
   renderObjectTypesDictionary();
   renderObjectKindsDictionary();
+  renderPlanMarkerLegend();
+  renderGlobalSearchFilterPanel();
 }
 
 /** Актуальный список видов зоны перехода для формы этажа (после правок справочника). */
@@ -2162,12 +2678,6 @@ function nextFloorSortOrder() {
   return Math.max(...state.floors.map((f) => f.sort_order)) + 1;
 }
 
-/** Ожидаемый следующий id (на бэкенде number выставляется равным id). До сохранения — только подсказка. */
-function predictedNextObjectTypeId() {
-  if (!state.objectTypes.length) return 1;
-  return Math.max(...state.objectTypes.map((t) => t.id)) + 1;
-}
-
 function predictedNextObjectKindId() {
   if (!state.objectKinds.length) return 1;
   return Math.max(...state.objectKinds.map((k) => k.id)) + 1;
@@ -2177,7 +2687,6 @@ function entityMetaHasOptionalGaps(kind, full, desc, addr) {
   if (
     kind === "object_type" ||
     kind === "object_kind" ||
-    kind === "object_type_new" ||
     kind === "object_kind_new" ||
     kind === "transition_zone" ||
     kind === "room"
@@ -2218,24 +2727,18 @@ async function submitEntityMetaDialog(e) {
 
   entityMetaSaving = true;
   try {
-  if (ctx.kind === "object_type_new") {
-    await api.createObjectType({
-      name: short,
-      full_name: full || null,
-      description: desc || null,
-    });
-    closeEntityMetaDialog();
-    dom.objectTypeNameInput.value = "";
-    await loadObjectDictionaries();
-    return;
-  }
   if (ctx.kind === "object_kind_new") {
-    const created = await api.createObjectKind({
+    const createPayload = {
       object_type_id: ctx.objectTypeId,
       name: short,
       full_name: full || null,
       description: desc || null,
-    });
+    };
+    if (objectTypeIdSupportsKindMarkerColor(ctx.objectTypeId)) {
+      createPayload.marker_color =
+        dom.entityMetaMarkerColor?.value || predictDefaultMarkerColor(ctx.objectTypeId);
+    }
+    const created = await api.createObjectKind(createPayload);
     const createdId = Number(created?.id);
     if (Number.isFinite(createdId) && !state.objectKinds.some((k) => Number(k.id) === createdId)) {
       state.objectKinds.push(created);
@@ -2243,6 +2746,9 @@ async function submitEntityMetaDialog(e) {
     closeEntityMetaDialog();
     dom.objectKindNameInput.value = "";
     await loadObjectDictionaries();
+    if (state.uiMode === "floor" && state.selected.floorId) {
+      await loadFloorContext(state.selected.floorId);
+    }
     return;
   }
 
@@ -2250,26 +2756,42 @@ async function submitEntityMetaDialog(e) {
   const numVal = Number(dom.entityMetaNumber.value) || id;
 
   if (ctx.kind === "object_type") {
-    await api.updateObjectType(id, {
-      name: short,
+    const payload = {
       number: numVal,
       full_name: full || null,
       description: desc || null,
-    });
+    };
+    if (isRoomObjectTypeName(ctx.shortName)) {
+      payload.marker_color = dom.entityMetaMarkerColor?.value || roomMarkerColor();
+    }
+    await api.updateObjectType(id, payload);
     closeEntityMetaDialog();
     await loadObjectDictionaries();
+    if (state.uiMode === "floor" && state.selected.floorId) {
+      await loadFloorContext(state.selected.floorId);
+    }
     return;
   }
   if (ctx.kind === "object_kind") {
-    await api.updateObjectKind(id, {
-      object_type_id: ctx.objectTypeId,
-      name: short,
+    const hierarchyKind = isHierarchyObjectKindTypeId(ctx.objectTypeId);
+    const kindPayload = {
       number: numVal,
       full_name: full || null,
       description: desc || null,
-    });
+    };
+    if (!hierarchyKind) {
+      kindPayload.object_type_id = ctx.objectTypeId;
+      kindPayload.name = short;
+    }
+    if (objectTypeIdSupportsKindMarkerColor(ctx.objectTypeId)) {
+      kindPayload.marker_color = dom.entityMetaMarkerColor?.value || undefined;
+    }
+    await api.updateObjectKind(id, kindPayload);
     closeEntityMetaDialog();
     await loadObjectDictionaries();
+    if (state.uiMode === "floor" && state.selected.floorId) {
+      await loadFloorContext(state.selected.floorId);
+    }
     return;
   }
   if (ctx.kind === "campus") {
@@ -2520,25 +3042,16 @@ dom.createFloorForm.addEventListener("submit", (e) =>
   }),
 );
 
-dom.objectTypeForm.addEventListener("submit", (e) =>
-  run(async () => {
-    e.preventDefault();
-    const name = dom.objectTypeNameInput.value.trim();
-    if (!name) return;
-    openEntityMetaDialog({
-      kind: "object_type_new",
-      shortName: name,
-      title: "Тип объекта",
-    });
-  }),
-);
-
 dom.objectKindForm.addEventListener("submit", (e) =>
   run(async () => {
     e.preventDefault();
     const object_type_id = Number(dom.objectKindTypeSelect.value);
     const name = dom.objectKindNameInput.value.trim();
     if (!object_type_id || !name) return;
+    const parentType = state.objectTypes.find((t) => t.id === object_type_id);
+    if (!parentType || !objectTypeIdAllowsDictionaryKindManage(object_type_id)) {
+      return;
+    }
     openEntityMetaDialog({
       kind: "object_kind_new",
       objectTypeId: object_type_id,
@@ -2836,6 +3349,7 @@ dom.entityMetaShortName?.addEventListener("input", () => {
 
 run(async () => {
   await Promise.all([loadInitialLists(), loadObjectDictionaries()]);
+  initGlobalSearch();
   initPlanMarkerScale();
   initPlanMarkerLegend();
   initPlanMarkerLayoutListeners();

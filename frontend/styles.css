@@ -75,6 +75,193 @@ body {
   min-width: 0;
 }
 
+.global-search-section {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 8px 0 20px;
+  grid-column: 1 / -1;
+}
+
+.global-search-section[hidden] {
+  display: none !important;
+}
+
+.global-search-wrap {
+  width: 100%;
+  max-width: 400px;
+}
+
+.global-search {
+  position: relative;
+  width: 100%;
+}
+
+.global-search__bar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.global-search__input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.global-search__btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.global-search__btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  min-width: 40px;
+}
+
+.global-search__icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.global-search-filter {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.global-search-filter[hidden] {
+  display: none !important;
+}
+
+.global-search-filter__columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+
+.global-search-filter__title {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.global-search-filter__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.global-search-filter__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.global-search-filter__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #666);
+}
+
+.global-search-filter {
+  max-width: 400px;
+}
+
+@media (max-width: 700px) {
+  .global-search-filter__columns {
+    grid-template-columns: 1fr;
+  }
+
+  .global-search-wrap,
+  .global-search-filter {
+    max-width: 100%;
+  }
+}
+
+.global-search__input:focus {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 1px;
+}
+
+.global-search__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  z-index: 200;
+}
+
+.global-search__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.global-search__item:hover,
+.global-search__item--active {
+  background: var(--bg-muted, rgba(0, 0, 0, 0.06));
+}
+
+.global-search__item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.global-search__item-name {
+  display: block;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.global-search__item-path {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-search__item-kind {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #666);
+  white-space: nowrap;
+}
+
 .content-titles h1 {
   margin: 0 0 6px 0;
   font-size: 1.5rem;
@@ -648,10 +835,35 @@ button {
 }
 
 .plan-marker-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
   margin: 0;
+  padding: 0;
   flex: 1 1 200px;
+  list-style: none;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.plan-marker-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-marker-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.plan-marker-legend[hidden] {
+  display: none !important;
 }
 
 .plan-marker-legend-toggle {
@@ -1094,6 +1306,10 @@ td {
   display: none !important;
 }
 
+.content-grid--dict .global-search-section {
+  order: -1;
+}
+
 .dict-cards-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(300px, 1fr));
@@ -1253,6 +1469,14 @@ td {
 
 .entity-edit-unsaved-banner[hidden] {
   display: none !important;
+}
+
+#entityMetaMarkerColor {
+  width: 100%;
+  max-width: 120px;
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
 }
 
 .entity-edit-actions {

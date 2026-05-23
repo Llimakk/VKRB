@@ -161,5 +161,13 @@ export const api = {
     });
   },
   deletePlanImage: (planId) => request(`/admin/plans/${planId}/image`, { method: "DELETE" }),
+  searchObjects: (q, filters = {}, signal) => {
+    const { limit = 25, hierTypes = [], tzKindIds = [], roomKindIds = [] } = filters;
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    for (const t of hierTypes) params.append("hier_types", t);
+    for (const id of tzKindIds) params.append("tz_kind_ids", String(id));
+    for (const id of roomKindIds) params.append("room_kind_ids", String(id));
+    return request(`/admin/search?${params}`, signal ? { signal } : {});
+  },
 };
 

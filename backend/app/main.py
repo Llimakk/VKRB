@@ -18,6 +18,7 @@ from app.api.admin.object_types import router as object_types_router
 from app.api.admin.plans import router as plans_router
 from app.api.admin.transition_zones import router as transition_zones_router
 from app.api.admin.media import router as media_router
+from app.api.admin.search import router as search_router
 
 
 app = FastAPI(title="VKRB Navigator - Admin API")
@@ -37,6 +38,7 @@ app.include_router(object_kinds_router)
 app.include_router(plans_router)
 app.include_router(transition_zones_router)
 app.include_router(media_router)
+app.include_router(search_router)
 
 
 @app.get("/health")
