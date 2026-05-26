@@ -125,13 +125,15 @@ def search_objects(
         if type_id is not None:
             query = query.filter(Object.object_type_id == type_id)
         if node_type is not None:
-            query = (
-                query
-                .join(ObjectEntryNode, ObjectEntryNode.object_id == Object.id)
+            # Subquery filter instead of JOIN+DISTINCT — keeps ORDER BY simple
+            # (Postgres requires ORDER BY columns to be in SELECT list when DISTINCT is used).
+            entry_subq = (
+                db.query(ObjectEntryNode.object_id)
                 .join(NavNode, NavNode.id == ObjectEntryNode.nav_node_id)
                 .filter(NavNode.node_type == node_type)
-                .distinct()
+                .subquery()
             )
+            query = query.filter(Object.id.in_(entry_subq))
         if q:
             relevance = case(
                 (Object.name.ilike(q), 0),
