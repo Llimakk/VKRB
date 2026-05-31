@@ -15,6 +15,8 @@ from app.services.minio_service import effective_photo_url
 
 router = APIRouter(prefix="/admin", tags=["admin-transition-zones"])
 
+TRANSITION_ZONE_NAME_EXISTS_ON_PLAN = "transition_zone_name_exists_on_plan"
+
 
 def _is_transition_zone_type_name(type_name: str) -> bool:
     n = (type_name or "").strip().lower()
@@ -88,7 +90,7 @@ def create_transition_zone(payload: TransitionZoneCreate, db: Session = Depends(
         db.commit()
     except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Зона перехода с таким именем уже есть") from e
+        raise HTTPException(status_code=409, detail=TRANSITION_ZONE_NAME_EXISTS_ON_PLAN) from e
     db.refresh(row)
     _sync_zone_number(db, row)
     row = (
@@ -128,7 +130,7 @@ def update_transition_zone(zone_id: int, payload: TransitionZoneUpdate, db: Sess
         db.commit()
     except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Конфликт при обновлении зоны перехода") from e
+        raise HTTPException(status_code=409, detail=TRANSITION_ZONE_NAME_EXISTS_ON_PLAN) from e
     row = (
         db.query(TransitionZone)
         .options(joinedload(TransitionZone.object_type), joinedload(TransitionZone.object_kind))

@@ -13,7 +13,7 @@ import {
   objectTypeIdAllowsDictionaryKindManage,
   setRoomDuplicateHint,
   setTransitionZoneDuplicateHint,
-  ensurePlanObjectNameAllowed,
+  transitionZoneNameExistsOnPlan,
   findRoomById,
 } from "./dictionary.js";
 import { initGlobalSearch } from "./global-search.js";
@@ -33,7 +33,6 @@ import {
   isEntityEditExpanded,
   applyEntityEditCollapsedUi,
   syncEntityEditUnsavedBanner,
-  commitEntityEditBaselineFromForm,
   ENTITY_EDIT_EXPANDED_KEY,
   nextFloorSortOrder,
   completeHierarchyCreate,
@@ -205,8 +204,6 @@ function wireEventListeners() {
       if (level === "campus") {
         const id = state.selected.campusId;
         await api.updateCampus(id, payload);
-        commitEntityEditBaselineFromForm();
-        syncEntityEditUnsavedBanner();
         state.campuses = await api.getCampuses();
         fillSelect(dom.campusSelect, state.campuses, SELECT_CAMPUS_PLACEHOLDER);
         dom.campusSelect.value = String(id);
@@ -214,8 +211,6 @@ function wireEventListeners() {
       } else if (level === "building") {
         const bid = state.selected.buildingId;
         await api.updateBuilding(bid, payload);
-        commitEntityEditBaselineFromForm();
-        syncEntityEditUnsavedBanner();
         state.buildings = await api.getBuildings(state.selected.campusId);
         fillSelect(dom.buildingSelect, state.buildings, SELECT_BUILDING_PLACEHOLDER);
         dom.buildingSelect.value = String(bid);
@@ -223,8 +218,6 @@ function wireEventListeners() {
       } else if (level === "structure") {
         const sid = state.selected.structureId;
         await api.updateStructure(sid, payload);
-        commitEntityEditBaselineFromForm();
-        syncEntityEditUnsavedBanner();
         state.structures = await api.getStructures(state.selected.buildingId);
         fillSelect(dom.structureSelect, state.structures, SELECT_STRUCTURE_PLACEHOLDER);
         dom.structureSelect.value = String(sid);
@@ -232,15 +225,11 @@ function wireEventListeners() {
       } else {
         const fid = state.selected.floorId;
         await api.updateFloor(fid, payload);
-        commitEntityEditBaselineFromForm();
-        syncEntityEditUnsavedBanner();
         state.floors = await api.getFloors(state.selected.structureId);
         fillSelect(dom.floorSelect, state.floors, SELECT_FLOOR_PLACEHOLDER);
         dom.floorSelect.value = String(fid);
         dom.pageTitle.textContent = getSelectedName(state.floors, fid);
-      }
-      if (level === "floor") {
-        await loadFloorContext(state.selected.floorId);
+        await loadFloorContext(fid);
       }
       renderPath();
       syncEntityEditCard();
@@ -345,17 +334,10 @@ function wireEventListeners() {
       if (!object_kind_id || !name) return;
       const kind = state.objectKinds.find((k) => Number(k.id) === object_kind_id);
       const object_type_id = kind?.object_type_id;
-      if (
-        object_type_id &&
-        !(await ensurePlanObjectNameAllowed({
-          entityKind: "transition_zone",
-          name,
-          objectTypeId: object_type_id,
-          planId: state.selected.planId,
-          sameFloorHintEl: dom.zoneNameDuplicateHint,
-          onRejectFocus: () => dom.nameInput.focus(),
-        }))
-      ) {
+      setTransitionZoneDuplicateHint(dom.zoneNameDuplicateHint, false);
+      if (object_type_id && transitionZoneNameExistsOnPlan(name, object_type_id)) {
+        setTransitionZoneDuplicateHint(dom.zoneNameDuplicateHint, true);
+        dom.nameInput.focus();
         return;
       }
       const created = await api.createTransitionZone({

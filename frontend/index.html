@@ -113,10 +113,10 @@
               <div class="photo-toolbar">
                 <form id="imageForm" class="photo-upload-form">
                   <input id="imageInput" type="file" accept="image/*" />
-                  <button type="submit" class="btn btn--primary">Загрузить / заменить JPG</button>
+                  <button type="submit" class="btn btn--primary">Загрузить / заменить</button>
                 </form>
                 <button id="downloadImageBtn" type="button" class="btn btn--outline" disabled>Скачать JPG</button>
-                <button id="deleteImageBtn" type="button" class="btn btn--danger">Удалить JPG</button>
+                <button id="deleteImageBtn" type="button" class="btn btn--danger">Удалить</button>
               </div>
             </div>
           </section>
@@ -132,6 +132,9 @@
                 <input id="nameInput" required placeholder="Название зоны" />
                 <button type="submit" class="btn btn--primary">Добавить</button>
               </form>
+              <p id="zoneNameDuplicateHint" class="form-inline-error zone-name-duplicate-hint" hidden>
+                Зона перехода с таким названием уже существует на этом этаже.
+              </p>
 
               <div id="zonesList" class="zones-list"></div>
             </div>
@@ -386,6 +389,9 @@
             <input id="entityMetaShortName" type="text" autocomplete="off" />
             <p id="entityMetaRoomDuplicateHint" class="form-inline-error" hidden>
               Помещение с таким названием уже существует на этом этаже.
+            </p>
+            <p id="entityMetaZoneDuplicateHint" class="form-inline-error" hidden>
+              Зона перехода с таким названием уже существует на этом этаже.
             </p>
           </div>
           <div>

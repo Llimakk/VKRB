@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import get_db
 from app.models import Building, Campus, Floor, Object, Plan, Structure, TransitionZone
 from app.schemas.admin import SearchHitOut
+from app.services.hierarchy_path import (
+    FLOOR_PATH_OPTIONS,
+    floor_location_ids,
+    floor_path_parts,
+    path_label,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin-search"])
 
@@ -28,24 +34,12 @@ ENTITY_TYPE_ORDER = {
     "plan_object": 5,
 }
 
-_FLOOR_PATH_OPTS = (
-    joinedload(Floor.structure)
-    .joinedload(Structure.building)
-    .joinedload(Building.campus)
-)
-
-
 def _escape_ilike(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _ilike_pattern(q: str) -> str:
     return f"%{_escape_ilike(q)}%"
-
-
-def _path_label(*parts: Optional[str]) -> Optional[str]:
-    names = [p.strip() for p in parts if p and str(p).strip()]
-    return " / ".join(names) if names else None
 
 
 @dataclass
@@ -77,30 +71,6 @@ class _Hit:
             transition_zone_id=self.transition_zone_id,
             path_label=self.path_label,
         )
-
-
-def _floor_path_parts(floor: Floor) -> tuple[Optional[str], Optional[str], Optional[str], str]:
-    structure = floor.structure
-    building = structure.building if structure else None
-    campus = building.campus if building else None
-    return (
-        campus.name if campus else None,
-        building.name if building else None,
-        structure.name if structure else None,
-        floor.name,
-    )
-
-
-def _floor_location_ids(floor: Floor) -> tuple[int, Optional[int], int, int]:
-    structure = floor.structure
-    building = structure.building if structure else None
-    campus_id = building.campus_id if building else 0
-    return (
-        campus_id,
-        building.id if building else None,
-        floor.structure_id,
-        floor.id,
-    )
 
 
 @router.get("/search", response_model=list[SearchHitOut])
@@ -152,7 +122,7 @@ def search_objects(
                     kind_label=HIER_KIND_LABELS["building"],
                     campus_id=b.campus_id,
                     building_id=b.id,
-                    path_label=_path_label(campus_name),
+                    path_label=path_label(campus_name),
                 )
             )
 
@@ -174,7 +144,7 @@ def search_objects(
                     campus_id=building.campus_id if building else 0,
                     building_id=s.building_id,
                     structure_id=s.id,
-                    path_label=_path_label(
+                    path_label=path_label(
                         campus.name if campus else None,
                         building.name if building else None,
                     ),
@@ -184,12 +154,12 @@ def search_objects(
     if "floor" in hier_set:
         for f in (
             db.query(Floor)
-            .options(_FLOOR_PATH_OPTS)
+            .options(FLOOR_PATH_OPTIONS)
             .filter(Floor.name.ilike(pattern, escape="\\"))
             .all()
         ):
-            campus_id, building_id, structure_id, floor_id = _floor_location_ids(f)
-            c_name, b_name, s_name, _ = _floor_path_parts(f)
+            campus_id, building_id, structure_id, floor_id = floor_location_ids(f)
+            c_name, b_name, s_name, _ = floor_path_parts(f)
             hits.append(
                 _Hit(
                     entity_type="floor",
@@ -200,7 +170,7 @@ def search_objects(
                     building_id=building_id,
                     structure_id=structure_id,
                     floor_id=floor_id,
-                    path_label=_path_label(c_name, b_name, s_name),
+                    path_label=path_label(c_name, b_name, s_name),
                 )
             )
 
@@ -211,7 +181,7 @@ def search_objects(
             .join(Floor, Plan.floor_id == Floor.id)
             .options(
                 joinedload(Object.object_kind),
-                joinedload(Object.plan).joinedload(Plan.floor).options(_FLOOR_PATH_OPTS),
+                joinedload(Object.plan).joinedload(Plan.floor).options(FLOOR_PATH_OPTIONS),
             )
             .filter(Object.name.ilike(pattern, escape="\\"))
             .filter(Object.object_kind_id.in_(room_ids))
@@ -220,8 +190,8 @@ def search_objects(
             floor = o.plan.floor if o.plan else None
             if not floor:
                 continue
-            campus_id, building_id, structure_id, floor_id = _floor_location_ids(floor)
-            c_name, b_name, s_name, f_name = _floor_path_parts(floor)
+            campus_id, building_id, structure_id, floor_id = floor_location_ids(floor)
+            c_name, b_name, s_name, f_name = floor_path_parts(floor)
             kind_label = o.object_kind.name if o.object_kind else "Помещение"
             hits.append(
                 _Hit(
@@ -234,7 +204,7 @@ def search_objects(
                     structure_id=structure_id,
                     floor_id=floor_id,
                     transition_zone_id=o.transition_zone_id,
-                    path_label=_path_label(c_name, b_name, s_name, f_name),
+                    path_label=path_label(c_name, b_name, s_name, f_name),
                 )
             )
 
@@ -245,7 +215,7 @@ def search_objects(
             .join(Floor, Plan.floor_id == Floor.id)
             .options(
                 joinedload(TransitionZone.object_kind),
-                joinedload(TransitionZone.plan).joinedload(Plan.floor).options(_FLOOR_PATH_OPTS),
+                joinedload(TransitionZone.plan).joinedload(Plan.floor).options(FLOOR_PATH_OPTIONS),
             )
             .filter(TransitionZone.name.ilike(pattern, escape="\\"))
             .filter(TransitionZone.object_kind_id.in_(tz_ids))
@@ -254,8 +224,8 @@ def search_objects(
             floor = z.plan.floor if z.plan else None
             if not floor:
                 continue
-            campus_id, building_id, structure_id, floor_id = _floor_location_ids(floor)
-            c_name, b_name, s_name, f_name = _floor_path_parts(floor)
+            campus_id, building_id, structure_id, floor_id = floor_location_ids(floor)
+            c_name, b_name, s_name, f_name = floor_path_parts(floor)
             kind_label = z.object_kind.name if z.object_kind else "Зона перехода"
             hits.append(
                 _Hit(
@@ -267,7 +237,7 @@ def search_objects(
                     building_id=building_id,
                     structure_id=structure_id,
                     floor_id=floor_id,
-                    path_label=_path_label(c_name, b_name, s_name, f_name),
+                    path_label=path_label(c_name, b_name, s_name, f_name),
                 )
             )
 

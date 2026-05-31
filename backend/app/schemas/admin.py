@@ -259,3 +259,18 @@ class SearchHitOut(BaseModel):
     floor_id: Optional[int] = None
     transition_zone_id: Optional[int] = None
     path_label: Optional[str] = None
+
+
+DuplicateEntityKind = Literal["transition_zone", "room"]
+
+
+class DuplicateNameMatchOut(BaseModel):
+    entity_id: int
+    entity_kind: DuplicateEntityKind
+    path_label: str
+    floor_id: int
+    plan_id: int
+
+
+class DuplicateNameCheckOut(BaseModel):
+    matches: list[DuplicateNameMatchOut] = []

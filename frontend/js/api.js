@@ -169,5 +169,17 @@ export const api = {
     for (const id of roomKindIds) params.append("room_kind_ids", String(id));
     return request(`/admin/search?${params}`, signal ? { signal } : {});
   },
+  checkDuplicateName: ({ entityKind, name, objectTypeId, planId, excludeEntityId }) => {
+    const params = new URLSearchParams({
+      entity_kind: entityKind,
+      name,
+      object_type_id: String(objectTypeId),
+      plan_id: String(planId),
+    });
+    if (excludeEntityId != null) {
+      params.set("exclude_entity_id", String(excludeEntityId));
+    }
+    return request(`/admin/duplicate-name-check?${params}`);
+  },
 };
 
