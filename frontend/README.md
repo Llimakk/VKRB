@@ -25,4 +25,4 @@ python -m http.server 5173 --directory frontend
 
 Открыть: `http://localhost:5173`
 
-Примечание: нужен запущенный API на `http://localhost:8000`.
+Нужен запущенный API на `http://localhost:8000`.

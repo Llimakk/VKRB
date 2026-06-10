@@ -1,6 +1,6 @@
-## VKRB Navigator — Admin API
+## Admin API
 
-Backend для админки (без навигации и авторизации).
+Backend для интерфейса администратора
 
 ### Docker
 
